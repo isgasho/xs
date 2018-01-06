@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"net"
 
@@ -17,8 +16,8 @@ func main() {
 	conn := hkex.NewHKExConn(&bareconn)
 	fmt.Printf("conn: %v\n", conn)
 
-	fmt.Fprintf(conn, "GET / HTTP/1.0\r\n\r\n")
+	//	fmt.Fprintf(conn, "GET / HTTP/1.0\r\n\r\n")
 	//	status, err := bufio.NewReader(conn).ReadString('\n')
-	_, err = bufio.NewReader(conn).ReadString('\n')
+	//	_, err = bufio.NewReader(conn).ReadString('\n')
 	// ...
 }

@@ -35,9 +35,21 @@ type HerraduraKEx struct {
 	fa           *big.Int
 }
 
+//// Returns a new HerraduraKEx struct with default intSz,pubSz
+//func New() (h *HerraduraKEx) {
+//	return New(256, 64)
+//}
+
 // Returns a new HerraduraKEx struct
 func New(i int, p int) (h *HerraduraKEx) {
 	h = new(HerraduraKEx)
+
+	if i == 0 {
+		i = 256
+	}
+        if p == 0 {
+		p = 64
+	}
 
 	h.intSz = i
 	h.pubSz = p
@@ -133,19 +145,31 @@ func (h *HerraduraKEx) String() string {
 }
 
 type HKExConn struct {
-	c net.Conn
+	c net.Conn    // which also implements io.Reader, io.Writer, ...
+	h *HerraduraKEx
 }
 
 // Return c coerced into a HKExConn (which implements interface net.Conn)
 func NewHKExConn(c *net.Conn) (hc *HKExConn) {
-	fmt.Println("** NewHKExConn wrapping net.Conn **")
-	return &HKExConn{*c}
+	//fmt.Println("** NewHKExConn wrapping net.Conn **")
+	hc = new(HKExConn)
+
+	hc.c = *c
+	hc.h = New(0,0)
+	d := big.NewInt(0)
+	_,err := fmt.Fscanln(hc.c, d)
+	if err != nil {
+		//
+	}
+	hc.h.PeerD = d
+	fmt.Printf("** peerD:%s\n", hc.h.PeerD.Text(16))
+	return
 }
 
 func (hc HKExConn) Read(b []byte) (n int, err error) {
 	n, err = hc.c.Read(b)
 	if n > 0 {
-		fmt.Println("** hc.Read() wraps c.Read() **")
+		//fmt.Println("** hc.Read() wraps c.Read() **")
 	}
 	return
 }
@@ -153,7 +177,7 @@ func (hc HKExConn) Read(b []byte) (n int, err error) {
 func (hc HKExConn) Write(b []byte) (n int, err error) {
 	n, err = hc.c.Write(b)
 	if n > 0 {
-		fmt.Printf("** hc.Write('%s') wraps c.Write() **\n", b)
+		//fmt.Printf("** hc.Write('%s') wraps c.Write() **\n", b)
 	}
 	return
 }
