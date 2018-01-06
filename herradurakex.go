@@ -47,7 +47,7 @@ func New(i int, p int) (h *HerraduraKEx) {
 	if i == 0 {
 		i = 256
 	}
-        if p == 0 {
+	if p == 0 {
 		p = 64
 	}
 
@@ -143,33 +143,93 @@ func (h *HerraduraKEx) String() string {
 		h.PeerD.Text(16),
 		h.fa.Text(16))
 }
+/*---------------------------------------------------------------------*/
 
 type HKExConn struct {
-	c net.Conn    // which also implements io.Reader, io.Writer, ...
+	c net.Conn // which also implements io.Reader, io.Writer, ...
 	h *HerraduraKEx
 }
 
-// Return c coerced into a HKExConn (which implements interface net.Conn)
-func NewHKExConn(c *net.Conn) (hc *HKExConn) {
-	//fmt.Println("** NewHKExConn wrapping net.Conn **")
-	hc = new(HKExConn)
-
-	hc.c = *c
-	hc.h = New(0,0)
-	d := big.NewInt(0)
-	_,err := fmt.Fscanln(hc.c, d)
+// Dial as net.Dial(), but with implicit HKEx PeerD read on connect
+func Dial(protocol string, ipport string) (hc *HKExConn, err error) {
+	c, err := net.Dial(protocol, ipport)
 	if err != nil {
-		//
+		return nil, err
+	}
+	hc = &HKExConn{c, New(0, 0)}
+
+	// Stub KEx
+	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
+
+	d := big.NewInt(0)
+	_, err = fmt.Fscanln(c, d)
+	if err != nil {
+		return nil, err
 	}
 	hc.h.PeerD = d
-	fmt.Printf("** peerD:%s\n", hc.h.PeerD.Text(16))
+	fmt.Printf("**(c)** peerD:%s\n", hc.h.PeerD.Text(16))
+	hc.h.FA()
+	fmt.Printf("**(c)** FA:%s\n", hc.h.fa)
 	return
 }
+
+func (hc *HKExConn) Close() (err error) {
+	err  = hc.c.Close()
+	fmt.Println("[Conn Closing]")
+        return
+}
+/*---------------------------------------------------------------------*/
+
+type HKExListener struct {
+	l net.Listener
+}
+
+func Listen(protocol string, ipport string) (hl HKExListener, e error) {
+	l, err := net.Listen(protocol, ipport)
+	if err != nil {
+		return HKExListener{nil}, err
+	}
+	fmt.Println("[Listening]")
+	hl.l = l
+	return
+}
+
+func (hl *HKExListener) Close() {
+	hl.l.Close()
+	fmt.Println("[Listener Closed]")
+}
+
+func (hl *HKExListener) Accept() (hc HKExConn, err error) {
+	c, err := hl.l.Accept()
+
+	fmt.Println("[Accepted]")
+	if err != nil {
+		return HKExConn{nil, nil}, err
+	}
+	hc = HKExConn{c, New(0, 0)}
+
+	d := big.NewInt(0)
+	_, err = fmt.Fscanln(c, d)
+	if err != nil {
+		return hc, err
+	}
+	hc.h.PeerD = d
+	fmt.Printf("**(s)** peerD:%s\n", hc.h.PeerD.Text(16))
+	hc.h.FA()
+	fmt.Printf("**(s)** FA:%s\n", hc.h.fa)
+
+	// Stub KEx
+	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
+
+	return
+}
+
+/*---------------------------------------------------------------------*/
 
 func (hc HKExConn) Read(b []byte) (n int, err error) {
 	n, err = hc.c.Read(b)
 	if n > 0 {
-		//fmt.Println("** hc.Read() wraps c.Read() **")
+		fmt.Println("** hc.Read() wraps c.Read() **")
 	}
 	return
 }
@@ -179,5 +239,23 @@ func (hc HKExConn) Write(b []byte) (n int, err error) {
 	if n > 0 {
 		//fmt.Printf("** hc.Write('%s') wraps c.Write() **\n", b)
 	}
+	return
+}
+
+// Return c coerced into a HKExConn (which implements interface net.Conn)
+//   Only useful if one wants to convert an open connection later to HKEx
+//   (Use Dial() instead to start with HKEx automatically.)
+func NewHKExConn(c *net.Conn) (hc *HKExConn) {
+	hc = new(HKExConn)
+
+	hc.c = *c
+	hc.h = New(0, 0)
+	d := big.NewInt(0)
+	_, err := fmt.Fscanln(hc.c, d)
+	if err != nil {
+		//
+	}
+	hc.h.PeerD = d
+	fmt.Printf("** peerD:%s\n", hc.h.PeerD.Text(16))
 	return
 }

@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
-	//  "blitter.com/herradurakex"
+	//"net"
+	hkex "blitter.com/herradurakex"
 )
 
 func main() {
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
-	l, err := net.Listen("tcp", ":2000")
+	l, err := hkex.Listen("tcp", ":2000")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func main() {
 		// Handle the connection in a new goroutine.
 		// The loop then returns to accepting, so that
 		// multiple connections may be served concurrently.
-		go func(c net.Conn) {
+		go func(c hkex.HKExConn) {
 			// Echo all incoming data.
 			io.Copy(c, c)
 			fmt.Println("Client sent:%v\n", c)
