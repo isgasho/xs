@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	//  "blitter.com/herradurakex"
 )
 
 func main() {
@@ -26,14 +27,13 @@ func main() {
 
 		fmt.Println("Accepted client")
 
-
 		// Handle the connection in a new goroutine.
 		// The loop then returns to accepting, so that
 		// multiple connections may be served concurrently.
 		go func(c net.Conn) {
 			// Echo all incoming data.
 			io.Copy(c, c)
-			fmt.Println("Client sent:%v\n",c)
+			fmt.Println("Client sent:%v\n", c)
 			// Shut down the connection.
 			c.Close()
 		}(conn)

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
+	"net"
 	"time"
 )
 
@@ -129,4 +130,30 @@ func (h *HerraduraKEx) String() string {
 		h.d.Text(16),
 		h.PeerD.Text(16),
 		h.fa.Text(16))
+}
+
+type HKExConn struct {
+	c net.Conn
+}
+
+// Return c coerced into a HKExConn (which implements interface net.Conn)
+func NewHKExConn(c *net.Conn) (hc *HKExConn) {
+	fmt.Println("** NewHKExConn wrapping net.Conn **")
+	return &HKExConn{*c}
+}
+
+func (hc HKExConn) Read(b []byte) (n int, err error) {
+	n, err = hc.c.Read(b)
+	if n > 0 {
+		fmt.Println("** hc.Read() wraps c.Read() **")
+	}
+	return
+}
+
+func (hc HKExConn) Write(b []byte) (n int, err error) {
+	n, err = hc.c.Write(b)
+	if n > 0 {
+		fmt.Printf("** hc.Write('%s') wraps c.Write() **\n", b)
+	}
+	return
 }
