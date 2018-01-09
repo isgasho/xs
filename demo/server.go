@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"time"
-	//"net"
+
 	hkex "blitter.com/herradurakex"
 )
 
@@ -30,7 +30,7 @@ func main() {
 		// Handle the connection in a new goroutine.
 		// The loop then returns to accepting, so that
 		// multiple connections may be served concurrently.
-		go func(c hkex.HKExConn) (e error) {
+		go func(c hkex.Conn) (e error) {
 			ch := make(chan []byte)
 			chN := 0
 			eCh := make(chan error)

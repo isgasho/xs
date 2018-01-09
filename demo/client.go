@@ -12,8 +12,6 @@ func main() {
 		// handle error
 		fmt.Println("Err!")
 	}
-	//fmt.Printf("conn: %v\n", conn)
-
 	fmt.Fprintf(conn, "\x01\x02\x03\x04")
 	//fmt.Fprintf(conn, "GET / HTTP/1.0\r\n\r\n")
 	//status, err := bufio.NewReader(conn).ReadString('\n')

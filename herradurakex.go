@@ -146,18 +146,18 @@ func (h *HerraduraKEx) String() string {
 
 /*---------------------------------------------------------------------*/
 
-type HKExConn struct {
+type Conn struct {
 	c net.Conn // which also implements io.Reader, io.Writer, ...
 	h *HerraduraKEx
 }
 
 // Dial as net.Dial(), but with implicit HKEx PeerD read on connect
-func Dial(protocol string, ipport string) (hc *HKExConn, err error) {
+func Dial(protocol string, ipport string) (hc *Conn, err error) {
 	c, err := net.Dial(protocol, ipport)
 	if err != nil {
 		return nil, err
 	}
-	hc = &HKExConn{c, New(0, 0)}
+	hc = &Conn{c, New(0, 0)}
 
 	// KEx
 	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
@@ -175,7 +175,7 @@ func Dial(protocol string, ipport string) (hc *HKExConn, err error) {
 	return
 }
 
-func (hc *HKExConn) Close() (err error) {
+func (hc *Conn) Close() (err error) {
 	err = hc.c.Close()
 	fmt.Println("[Conn Closing]")
 	return
@@ -202,14 +202,14 @@ func (hl *HKExListener) Close() {
 	fmt.Println("[Listener Closed]")
 }
 
-func (hl *HKExListener) Accept() (hc HKExConn, err error) {
+func (hl *HKExListener) Accept() (hc Conn, err error) {
 	c, err := hl.l.Accept()
 
 	fmt.Println("[Accepted]")
 	if err != nil {
-		return HKExConn{nil, nil}, err
+		return Conn{nil, nil}, err
 	}
-	hc = HKExConn{c, New(0, 0)}
+	hc = Conn{c, New(0, 0)}
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
@@ -230,7 +230,7 @@ func (hl *HKExListener) Accept() (hc HKExConn, err error) {
 }
 
 /*---------------------------------------------------------------------*/
-func (hc HKExConn) Read(b []byte) (n int, err error) {
+func (hc Conn) Read(b []byte) (n int, err error) {
 	n, err = hc.c.Read(b)
 	fmt.Printf("[Decrypting...]\n")
 	fmt.Printf("[ciphertext:%+v]\n", b[0:n])
@@ -244,7 +244,7 @@ func (hc HKExConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (hc HKExConn) Write(b []byte) (n int, err error) {
+func (hc Conn) Write(b []byte) (n int, err error) {
 	fmt.Printf("[Encrypting...]\n")
 	for i, _ := range b {
 		// FOR TESTING ONLY!! USE REAL CRYPTO HERE
@@ -256,11 +256,11 @@ func (hc HKExConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-// Return c coerced into a HKExConn (which implements interface net.Conn)
+// Return c coerced into a HKEx Conn (which implements interface net.Conn)
 //   Only useful if one wants to convert an open connection later to HKEx
 //   (Use Dial() instead to start with HKEx automatically.)
-func NewHKExConn(c *net.Conn) (hc *HKExConn) {
-	hc = new(HKExConn)
+func NewHKExConn(c *net.Conn) (hc *Conn) {
+	hc = new(Conn)
 
 	hc.c = *c
 	hc.h = New(0, 0)
