@@ -22,6 +22,7 @@ package herradurakex
 // 'net.Dial', 'net.Listen' etc. with 'hkex.Dial', 'hkex.Listen' and so
 // forth.
 import (
+	"crypto/cipher"
 	"fmt"
 	"math/big"
 	"net"
@@ -32,6 +33,8 @@ import (
 type Conn struct {
 	c net.Conn // which also implements io.Reader, io.Writer, ...
 	h *HerraduraKEx
+	r *cipher.StreamReader
+	w *cipher.StreamWriter
 }
 
 // Dial as net.Dial(), but with implicit HKEx PeerD read on connect
@@ -40,9 +43,8 @@ func Dial(protocol string, ipport string) (hc *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	hc = &Conn{c, New(0, 0)}
+	hc = &Conn{c, New(0, 0), nil, nil}
 
-	// KEx
 	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
 
 	d := big.NewInt(0)
@@ -55,6 +57,9 @@ func Dial(protocol string, ipport string) (hc *Conn, err error) {
 	fmt.Printf("**(c)** peerD:%s\n", hc.h.PeerD.Text(16))
 	hc.h.FA()
 	fmt.Printf("**(c)** FA:%s\n", hc.h.fa)
+
+	hc.r = hc.getStreamReader(hc.h.fa, 0x0, hc.c)
+	hc.w = hc.getStreamWriter(hc.h.fa, 0x0, hc.c)
 	return
 }
 
@@ -90,9 +95,9 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 
 	fmt.Println("[Accepted]")
 	if err != nil {
-		return Conn{nil, nil}, err
+		return Conn{nil, nil, nil, nil}, err
 	}
-	hc = Conn{c, New(0, 0)}
+	hc = Conn{c, New(0, 0), nil, nil}
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
@@ -106,9 +111,10 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	hc.h.FA()
 	fmt.Printf("**(s)** FA:%s\n", hc.h.fa)
 
-	// KEx
 	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
 
+	hc.r = hc.getStreamReader(hc.h.fa, 0x0, hc.c)
+	hc.w = hc.getStreamWriter(hc.h.fa, 0x0, hc.c)
 	return
 }
 

@@ -41,7 +41,7 @@ const (
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
-func (hd Conn) getReadStream(keymat *big.Int, flags uint32, r io.Reader) (ret io.Reader) {
+func (hc Conn) getStreamReader(keymat *big.Int, flags uint32, r io.Reader) (ret *cipher.StreamReader) {
 	var key []byte
 	var block cipher.Block
 	var err error
@@ -78,7 +78,7 @@ func (hd Conn) getReadStream(keymat *big.Int, flags uint32, r io.Reader) (ret io
 	return
 }
 
-func (hd Conn) getWriteStream(keymat *big.Int, flags uint32, w io.Writer) (ret io.Writer) {
+func (hc Conn) getStreamWriter(keymat *big.Int, flags uint32, w io.Writer) (ret *cipher.StreamWriter) {
 	var key []byte
 	var block cipher.Block
 	var err error
