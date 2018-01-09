@@ -16,13 +16,9 @@
 package herradurakex
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
-	"os"
 )
 
 /*---------------------------------------------------------------------*/
