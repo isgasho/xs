@@ -8,6 +8,11 @@ import (
 	hkex "blitter.com/herradurakex"
 )
 
+// Demo of a simple server that listens and spawns goroutines for each
+// connecting client. Note this code is identical to standard tcp
+// server code, save for declaring 'hkex' rather than 'net'
+// Listener and Conns. The KEx and encrypt/decrypt is done within the type.
+// Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
