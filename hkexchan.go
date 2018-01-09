@@ -17,6 +17,9 @@
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
 package herradurakex
 
+/* Support functions to set up encryption once an HKEx Conn has been
+ established with FA exchange */
+
 import (
 	"crypto/aes"
 	"crypto/cipher"
@@ -35,25 +38,30 @@ const (
 )
 
 /*TODO: HMAC derived from HKEx FA.*/
-/* Auxilliary functionality to set up encryption after a channel has
-been negotiated via hkexnet.go -- set up encryption algs with key, IV,
+/* Support functionality to set up encryption after a channel has
+been negotiated via hkexnet.go
 */
-func (hd Conn) cryptoSetup(keymat *big.Int, flags uint32, r io.Reader) (ret io.Reader) {
-	// 256 algs should be enough for everybody.(tm)
+func (hd Conn) getReadStream(keymat *big.Int, flags uint32, r io.Reader) (ret io.Reader) {
 	var key []byte
 	var block cipher.Block
+	var err error
 
+	// 256 algs should be enough for everybody.(tm)
 	cipherAlg := (flags & 8)
 	//TODO: flags for HMAC from keymat
 	switch cipherAlg {
 	case C_AES_256:
 		key = keymat.Bytes()[0:aes.BlockSize]
-		block, err := aes.NewCipher(key)
+		block, err = aes.NewCipher(key)
 		break
 	default:
 		fmt.Println("DOOFUS SET A VALID CIPHER ALG")
-		block, err := aes.NewCipher(key)
+		block, err = aes.NewCipher(key)
 		os.Exit(1)
+	}
+
+	if err != nil {
+		panic(err)
 	}
 
 	// If the key is unique for each ciphertext, then it's ok to use a zero
@@ -61,11 +69,44 @@ func (hd Conn) cryptoSetup(keymat *big.Int, flags uint32, r io.Reader) (ret io.R
 	var iv [aes.BlockSize]byte
 	stream := cipher.NewOFB(block, iv[:])
 
-	ret = &cipher.StreamReader{S: stream, R: inFile}
-	// Copy the input file to the output file, decrypting as we go.
-	if _, err := io.Copy(outFile, reader); err != nil {
+	ret = &cipher.StreamReader{S: stream, R: r}
+
+	// Note that this example is simplistic in that it omits any
+	// authentication of the encrypted data. If you were actually to use
+	// StreamReader in this manner, an attacker could flip arbitrary bits in
+	// the output.
+	return
+}
+
+func (hd Conn) getWriteStream(keymat *big.Int, flags uint32, w io.Writer) (ret io.Writer) {
+	var key []byte
+	var block cipher.Block
+	var err error
+
+	// 256 algs should be enough for everybody.(tm)
+	cipherAlg := (flags & 8)
+	//TODO: flags for HMAC from keymat
+	switch cipherAlg {
+	case C_AES_256:
+		key = keymat.Bytes()[0:aes.BlockSize]
+		block, err = aes.NewCipher(key)
+		break
+	default:
+		fmt.Println("DOOFUS SET A VALID CIPHER ALG")
+		block, err = aes.NewCipher(key)
+		os.Exit(1)
+	}
+
+	if err != nil {
 		panic(err)
 	}
+
+	// If the key is unique for each ciphertext, then it's ok to use a zero
+	// IV.
+	var iv [aes.BlockSize]byte
+	stream := cipher.NewOFB(block, iv[:])
+
+	ret = &cipher.StreamWriter{S: stream, W: w}
 
 	// Note that this example is simplistic in that it omits any
 	// authentication of the encrypted data. If you were actually to use
