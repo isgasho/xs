@@ -15,12 +15,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
+
 package herradurakex
 
 // Implementation of HKEx-wrapped versions of the golang standard
 // net package interfaces, allowing clients and servers to simply replace
-// 'net.Dial', 'net.Listen' etc. with 'hkex.Dial', 'hkex.Listen' and so
-// forth.
+// 'net.Dial' and 'net.Listen' with 'hkex.Dial' and 'hkex.Listen'.
 import (
 	"bytes"
 	"crypto/cipher"
@@ -31,6 +31,7 @@ import (
 
 /*---------------------------------------------------------------------*/
 
+// A HKex connection - drop-in replacement for net.Conn
 type Conn struct {
 	c net.Conn // which also implements io.Reader, io.Writer, ...
 	h *HerraduraKEx
@@ -64,6 +65,7 @@ func Dial(protocol string, ipport string) (hc *Conn, err error) {
 	return
 }
 
+// Close a hkex.Conn
 func (hc *Conn) Close() (err error) {
 	err = hc.c.Close()
 	fmt.Println("[Conn Closing]")
@@ -72,10 +74,12 @@ func (hc *Conn) Close() (err error) {
 
 /*---------------------------------------------------------------------*/
 
+// A hkex Listener, conforming to net.Listener - returns a hkex.Conn
 type HKExListener struct {
 	l net.Listener
 }
 
+// hkex.Listen, a drop-in replacement for net.Conn.Listen
 func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 	l, err := net.Listen(protocol, ipport)
 	if err != nil {
@@ -86,11 +90,13 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 	return
 }
 
+// Close a hkex Listener
 func (hl *HKExListener) Close() {
 	hl.l.Close()
 	fmt.Println("[Listener Closed]")
 }
 
+// Accept a client connection, conforming to net.Listener.Accept()
 func (hl *HKExListener) Accept() (hc Conn, err error) {
 	c, err := hl.l.Accept()
 
@@ -153,7 +159,8 @@ func (hc Conn) Write(b []byte) (n int, err error) {
 // Return c coerced into a HKEx Conn (which implements interface net.Conn)
 //   Only useful if one wants to convert an open connection later to HKEx
 //   (Use Dial() instead to start with HKEx automatically.)
-func NewHKExConn(c *net.Conn) (hc *Conn) {
+/*
+ func NewHKExConn(c *net.Conn) (hc *Conn) {
 	hc = new(Conn)
 
 	hc.c = *c
@@ -168,3 +175,5 @@ func NewHKExConn(c *net.Conn) (hc *Conn) {
 	fmt.Printf("** peerD:%s\n", hc.h.PeerD.Text(16))
 	return
 }
+*/
+

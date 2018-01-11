@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-// This type holds the session state for a key exchange
+// HerraduraKEx holds the session state for a key exchange.
 type HerraduraKEx struct {
 	intSz, pubSz int
 	randctx      *rand.Rand
@@ -43,7 +43,12 @@ type HerraduraKEx struct {
 //	return New(256, 64)
 //}
 
-// Returns a new HerraduraKEx struct
+// Return a new HerraduraKEx struct.
+//   i - internal (private) random nonce
+//   p - public (exchanged) random nonce (typically 1/4 bitsize of i)
+//
+//   If i or p are passed as zero, they will default to 256 and 64,
+//   respectively.
 func New(i int, p int) (h *HerraduraKEx) {
 	h = new(HerraduraKEx)
 
@@ -117,8 +122,8 @@ func (h *HerraduraKEx) fscx(up, down *big.Int) (result *big.Int) {
 	return result
 }
 
-// This is the iteration function using the result of the previous iteration as the first
-// parameter and the second parameter of the first iteration
+// This is the iteration function using the result of the previous iteration
+// as the first parameter and the second parameter of the first iteration.
 func (h *HerraduraKEx) fscxRevolve(x, y *big.Int, passes int) (result *big.Int) {
 	result = big.NewInt(0)
 
@@ -129,15 +134,19 @@ func (h *HerraduraKEx) fscxRevolve(x, y *big.Int, passes int) (result *big.Int) 
 	return result
 }
 
+// Return the D (FSCX Revolved) value, input to generate FA
+// (the value for peer KEx)
 func (h *HerraduraKEx) D() *big.Int {
 	return h.d
 }
 
+// Return the FA value, which must be sent to peer for KEx.
 func (h *HerraduraKEx) FA() {
 	h.fa = h.fscxRevolve(h.PeerD, h.b, h.intSz-h.pubSz)
 	h.fa.Xor(h.fa, h.a)
 }
 
+// Output HerraduraKEx type value as a string. Implements Stringer interface.
 func (h *HerraduraKEx) String() string {
 	return fmt.Sprintf("s:%d p:%d\na:%s\nb:%s\nd:->%s\n<-PeerD:%s\nfa:%s",
 		h.intSz, h.pubSz,

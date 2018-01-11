@@ -15,6 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
+
 package herradurakex
 
 /* Support functions to set up encryption once an HKEx Conn has been
@@ -28,10 +29,12 @@ import (
 	"os"
 )
 
+// Available ciphers for hkex.Conn
 const (
-	C_AES_256 = 0
+	C_AES_256 = 0  // (TODO: config or pass during KEx Dial()/Accept())  AES-256 cipher
 )
 
+// Available HMACs for hkex.Conn (TODO: not currently used)
 const (
 	H_SHA256 = 0
 )
