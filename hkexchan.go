@@ -18,13 +18,12 @@
 package herradurakex
 
 /* Support functions to set up encryption once an HKEx Conn has been
- established with FA exchange */
+established with FA exchange */
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
-	"io"
 	"math/big"
 	"os"
 )
@@ -41,7 +40,7 @@ const (
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
-func (hc Conn) getStreamReader(keymat *big.Int, flags uint32, r io.Reader) (ret *cipher.StreamReader) {
+func (hc Conn) getStream(keymat *big.Int, flags uint32) (ret cipher.Stream) {
 	var key []byte
 	var block cipher.Block
 	var err error
@@ -53,10 +52,16 @@ func (hc Conn) getStreamReader(keymat *big.Int, flags uint32, r io.Reader) (ret 
 	case C_AES_256:
 		key = keymat.Bytes()[0:aes.BlockSize]
 		block, err = aes.NewCipher(key)
+		iv := make([]byte, aes.BlockSize)
+		//if _, err = io.ReadFull(crand.Reader, iv); err != nil {
+		//	panic(err)
+		//}
+		iv = keymat.Bytes()[aes.BlockSize:]
+		ret = cipher.NewOFB(block, iv)
 		break
 	default:
 		fmt.Println("DOOFUS SET A VALID CIPHER ALG")
-		block, err = aes.NewCipher(key)
+		block, err = nil, nil
 		os.Exit(1)
 	}
 
@@ -64,53 +69,5 @@ func (hc Conn) getStreamReader(keymat *big.Int, flags uint32, r io.Reader) (ret 
 		panic(err)
 	}
 
-	// If the key is unique for each ciphertext, then it's ok to use a zero
-	// IV.
-	var iv [aes.BlockSize]byte
-	stream := cipher.NewOFB(block, iv[:])
-
-	ret = &cipher.StreamReader{S: stream, R: r}
-
-	// Note that this example is simplistic in that it omits any
-	// authentication of the encrypted data. If you were actually to use
-	// StreamReader in this manner, an attacker could flip arbitrary bits in
-	// the output.
-	return
-}
-
-func (hc Conn) getStreamWriter(keymat *big.Int, flags uint32, w io.Writer) (ret *cipher.StreamWriter) {
-	var key []byte
-	var block cipher.Block
-	var err error
-
-	// 256 algs should be enough for everybody.(tm)
-	cipherAlg := (flags & 8)
-	//TODO: flags for HMAC from keymat
-	switch cipherAlg {
-	case C_AES_256:
-		key = keymat.Bytes()[0:aes.BlockSize]
-		block, err = aes.NewCipher(key)
-		break
-	default:
-		fmt.Println("DOOFUS SET A VALID CIPHER ALG")
-		block, err = aes.NewCipher(key)
-		os.Exit(1)
-	}
-
-	if err != nil {
-		panic(err)
-	}
-
-	// If the key is unique for each ciphertext, then it's ok to use a zero
-	// IV.
-	var iv [aes.BlockSize]byte
-	stream := cipher.NewOFB(block, iv[:])
-
-	ret = &cipher.StreamWriter{S: stream, W: w}
-
-	// Note that this example is simplistic in that it omits any
-	// authentication of the encrypted data. If you were actually to use
-	// StreamReader in this manner, an attacker could flip arbitrary bits in
-	// the output.
 	return
 }

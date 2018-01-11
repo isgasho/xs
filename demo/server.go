@@ -44,7 +44,7 @@ func main() {
 			go func(ch chan []byte, eCh chan error) {
 				for {
 					// try to read the data
-					data := make([]byte, 64)
+					data := make([]byte, 8)
 					chN, err = c.Read(data)
 					if err != nil {
 						// send an error if it's encountered

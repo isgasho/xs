@@ -22,6 +22,7 @@ package herradurakex
 // 'net.Dial', 'net.Listen' etc. with 'hkex.Dial', 'hkex.Listen' and so
 // forth.
 import (
+	"bytes"
 	"crypto/cipher"
 	"fmt"
 	"math/big"
@@ -33,8 +34,8 @@ import (
 type Conn struct {
 	c net.Conn // which also implements io.Reader, io.Writer, ...
 	h *HerraduraKEx
-	r *cipher.StreamReader
-	w *cipher.StreamWriter
+	r cipher.Stream
+	w cipher.Stream
 }
 
 // Dial as net.Dial(), but with implicit HKEx PeerD read on connect
@@ -58,8 +59,8 @@ func Dial(protocol string, ipport string) (hc *Conn, err error) {
 	hc.h.FA()
 	fmt.Printf("**(c)** FA:%s\n", hc.h.fa)
 
-	hc.r = hc.getStreamReader(hc.h.fa, 0x0, hc.c)
-	hc.w = hc.getStreamWriter(hc.h.fa, 0x0, hc.c)
+	hc.r = hc.getStream(hc.h.fa, 0x0)
+	hc.w = hc.getStream(hc.h.fa, 0x0)
 	return
 }
 
@@ -97,7 +98,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	if err != nil {
 		return Conn{nil, nil, nil, nil}, err
 	}
-	hc = Conn{c, New(0, 0), nil, nil}
+	hc = Conn{c: c, h: New(0, 0), r: nil, w: nil}
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
@@ -113,35 +114,36 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 
 	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
 
-	hc.r = hc.getStreamReader(hc.h.fa, 0x0, hc.c)
-	hc.w = hc.getStreamWriter(hc.h.fa, 0x0, hc.c)
+	hc.r = hc.getStream(hc.h.fa, 0x0)
+	hc.w = hc.getStream(hc.h.fa, 0x0)
 	return
 }
 
 /*---------------------------------------------------------------------*/
 func (hc Conn) Read(b []byte) (n int, err error) {
-	n, err = hc.c.Read(b)
 	fmt.Printf("[Decrypting...]\n")
-	fmt.Printf("[ciphertext:%+v]\n", b[0:n])
-	for i := 0; i < n; i++ {
-		//for i, _ := range b {
-		// FOR TESTING ONLY!! USE REAL CRYPTO HERE
-		//b[i] ^= byte( hc.h.d.Mod(hc.h.d, big.NewInt(int64(c))).Int64() )
-		b[i] ^= hc.h.fa.Bytes()[0]
+	n, err = hc.c.Read(b)
+	if err != nil && err.Error() != "EOF" {
+		panic(err)
 	}
-	fmt.Printf("[plaintext:%+v]\n", b[0:n])
+	if n > 0 {
+		fmt.Printf("  ctext:%+v\n", b[:n])
+		db := bytes.NewBuffer(b[:n])
+		rs := &cipher.StreamReader{S: hc.r, R: db}
+		n, err = rs.Read(b)
+		fmt.Printf("  ptext:%+v\n", b[:n])
+	}
 	return
 }
 
 func (hc Conn) Write(b []byte) (n int, err error) {
 	fmt.Printf("[Encrypting...]\n")
-	for i, _ := range b {
-		// FOR TESTING ONLY!! USE REAL CRYPTO HERE
-		//b[i] ^= byte( hc.h.d.Mod(hc.h.d, big.NewInt(int64(c))).Int64() )
-		b[i] ^= hc.h.fa.Bytes()[0]
-	}
-	fmt.Printf("[ciphertext:%+v]\n", b)
-	n, err = hc.c.Write(b)
+	fmt.Printf("  ptext:%+v\n", b)
+	var wb bytes.Buffer
+	ws := &cipher.StreamWriter{S: hc.w, W: &wb}
+	n, err = ws.Write(b)
+	fmt.Printf("  ctext:%+v\n", wb.Bytes())
+	n, err = hc.c.Write(wb.Bytes())
 	return
 }
 
