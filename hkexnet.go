@@ -126,13 +126,14 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 	if err != nil && err.Error() != "EOF" {
 		panic(err)
 	}
-	if n > 0 {
-		fmt.Printf("  ctext:%+v\n", b[:n])
-		db := bytes.NewBuffer(b[:n])
-		rs := &cipher.StreamReader{S: hc.r, R: db}
-		n, err = rs.Read(b)
-		fmt.Printf("  ptext:%+v\n", b[:n])
-	}
+	fmt.Printf("  ctext:%+v\n", b[:n]) // print only used portion
+	db := bytes.NewBuffer(b[:n])
+	// The StreamReader acts like a pipe, decrypting
+	// whatever is available and forwarding the result
+	// to the parameter of Read() as a normal io.Reader
+	rs := &cipher.StreamReader{S: hc.r, R: db}
+	n, err = rs.Read(b)
+	fmt.Printf("  ptext:%+v\n", b[:n])
 	return
 }
 
@@ -140,6 +141,8 @@ func (hc Conn) Write(b []byte) (n int, err error) {
 	fmt.Printf("[Encrypting...]\n")
 	fmt.Printf("  ptext:%+v\n", b)
 	var wb bytes.Buffer
+	// The StreamWriter acts like a pipe, forwarding whatever is
+	// written to it through the cipher, encrypting as it goes
 	ws := &cipher.StreamWriter{S: hc.w, W: &wb}
 	n, err = ws.Write(b)
 	fmt.Printf("  ctext:%+v\n", wb.Bytes())
