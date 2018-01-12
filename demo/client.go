@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 
 	hkex "blitter.com/herradurakex"
@@ -13,7 +14,12 @@ import (
 // encrypt/decrypt is done within the type.
 // Compare to 'clientp.go' in this directory to see the equivalence.
 func main() {
-	conn, err := hkex.Dial("tcp", "localhost:2000", "C_TWOFISH_128")
+	var cAlg string
+
+	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
+	flag.Parse()
+
+	conn, err := hkex.Dial("tcp", "localhost:2000", cAlg)
 	if err != nil {
 		// handle error
 		fmt.Println("Err!")

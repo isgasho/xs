@@ -89,6 +89,11 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 			hc.cipheropts &= (0xFFFFFF00)
 			hc.cipheropts |= C_TWOFISH_128
 			break
+		case "C_BLOWFISH_64":
+			fmt.Println("[extension arg = C_BLOWFISH_64]")
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= C_BLOWFISH_64
+			break
 		case "H_SHA256":
 			hc.cipheropts &= (0xFFFF00FF)
 			hc.cipheropts |= (H_SHA256 << 8)
