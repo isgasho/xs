@@ -38,11 +38,6 @@ type HerraduraKEx struct {
 	fa           *big.Int
 }
 
-//// Returns a new HerraduraKEx struct with default intSz,pubSz
-//func New() (h *HerraduraKEx) {
-//	return New(256, 64)
-//}
-
 // Return a new HerraduraKEx struct.
 //   i - internal (private) random nonce
 //   p - public (exchanged) random nonce (typically 1/4 bitsize of i)
@@ -145,7 +140,6 @@ func (h *HerraduraKEx) FA() {
 	h.fa = h.fscxRevolve(h.PeerD, h.b, h.intSz-h.pubSz)
 	h.fa.Xor(h.fa, h.a)
 }
-
 // Output HerraduraKEx type value as a string. Implements Stringer interface.
 func (h *HerraduraKEx) String() string {
 	return fmt.Sprintf("s:%d p:%d\na:%s\nb:%s\nd:->%s\n<-PeerD:%s\nfa:%s",

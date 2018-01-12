@@ -33,35 +33,111 @@ import (
 
 // A HKex connection - drop-in replacement for net.Conn
 type Conn struct {
-	c net.Conn // which also implements io.Reader, io.Writer, ...
-	h *HerraduraKEx
-	r cipher.Stream
-	w cipher.Stream
+	c          net.Conn // which also implements io.Reader, io.Writer, ...
+	h          *HerraduraKEx
+	cipheropts uint32 // post-KEx cipher/hmac options
+	opts       uint32 // post-KEx protocol options
+	r          cipher.Stream
+	w          cipher.Stream
+}
+
+// Return the cipher/hmac options value, which is sent to the peer but is
+// not itself part of the KEx.
+// (Used for protocol-level negotiations after KEx such as
+// cipher/HMAC algorithm options etc.)
+func (c *Conn) ConnOpts() uint32 {
+	return c.cipheropts
+}
+
+// Set cipher/hmac options value, which is sent to the peer as part of
+// KEx but not part of the KEx itself.
+//
+// opts - bitfields for cipher and hmac alg. to use after KEx
+func (c *Conn) SetConnOpts(copts uint32) {
+	c.cipheropts = copts
+}
+
+// Return the protocol options value, which is sent to the peer but is
+// not itself part of the KEx or connection (cipher/hmac) setup.
+//
+// Consumers of this lib may use this for protocol-level options not part
+// of the KEx or encryption info used by the connection.
+func (c *Conn) Opts() uint32 {
+	return c.opts
+}
+
+// Set the protocol options value, which is sent to the peer but is
+// not itself part of the KEx or connection (cipher/hmac) setup.
+
+// Consumers of this lib may use this for protocol-level options not part
+// of the KEx of encryption info used by the connection.
+//
+// opts - a uint32, caller-defined
+func (c *Conn) SetOpts(opts uint32) {
+	c.opts = opts
+}
+
+func (hc *Conn) applyConnExtensions(extensions ...string) {
+	for _, s := range extensions {
+		switch s {
+		case "C_AES_256":
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= C_AES_256
+			break
+		case "C_TWOFISH_128":
+			fmt.Println("[extension arg = C_TWOFISH_128]")
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= C_TWOFISH_128
+			break
+		case "H_SHA256":
+			hc.cipheropts &= (0xFFFF00FF)
+			hc.cipheropts |= (H_SHA256 << 8)
+			break
+		default:
+			fmt.Printf("[Dial ext \"%s\" ignored]\n", s)
+			break
+		}
+	}
 }
 
 // Dial as net.Dial(), but with implicit HKEx PeerD read on connect
-func Dial(protocol string, ipport string) (hc *Conn, err error) {
+//   Can be called like net.Dial(), defaulting to C_AES_256/H_SHA256,
+//   or additional option arguments can be passed amongst the following:
+//
+//   "C_AES_256" | "C_TWOFISH_128"
+//
+//   "H_SHA256"
+func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err error) {
 	c, err := net.Dial(protocol, ipport)
 	if err != nil {
 		return nil, err
 	}
-	hc = &Conn{c, New(0, 0), nil, nil}
+	hc = &Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, r: nil, w: nil}
 
-	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
+	hc.applyConnExtensions(extensions...)
+
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
+		hc.cipheropts, hc.opts)
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
 	if err != nil {
 		return nil, err
 	}
+	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+		&hc.cipheropts, &hc.opts)
+	if err != nil {
+		return nil, err
+	}
+
 	hc.h.PeerD = d
 	fmt.Printf("** D:%s\n", hc.h.d.Text(16))
 	fmt.Printf("**(c)** peerD:%s\n", hc.h.PeerD.Text(16))
 	hc.h.FA()
 	fmt.Printf("**(c)** FA:%s\n", hc.h.fa)
 
-	hc.r = hc.getStream(hc.h.fa, 0x0)
-	hc.w = hc.getStream(hc.h.fa, 0x0)
+	hc.r = hc.getStream(hc.h.fa)
+	hc.w = hc.getStream(hc.h.fa)
 	return
 }
 
@@ -99,17 +175,22 @@ func (hl *HKExListener) Close() {
 // Accept a client connection, conforming to net.Listener.Accept()
 func (hl *HKExListener) Accept() (hc Conn, err error) {
 	c, err := hl.l.Accept()
-
-	fmt.Println("[Accepted]")
 	if err != nil {
-		return Conn{nil, nil, nil, nil}, err
+		return Conn{c: nil, h: nil, cipheropts: 0, opts: 0,
+			r: nil, w: nil}, err
 	}
-	hc = Conn{c: c, h: New(0, 0), r: nil, w: nil}
+	fmt.Println("[Accepted]")
+
+	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, r: nil, w: nil}
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
 	if err != nil {
-		fmt.Println("[Error]")
+		return hc, err
+	}
+	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+		&hc.cipheropts, &hc.opts)
+	if err != nil {
 		return hc, err
 	}
 	hc.h.PeerD = d
@@ -118,10 +199,11 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	hc.h.FA()
 	fmt.Printf("**(s)** FA:%s\n", hc.h.fa)
 
-	fmt.Fprintf(c, "0x%s\n", hc.h.d.Text(16))
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
+		hc.cipheropts, hc.opts)
 
-	hc.r = hc.getStream(hc.h.fa, 0x0)
-	hc.w = hc.getStream(hc.h.fa, 0x0)
+	hc.r = hc.getStream(hc.h.fa)
+	hc.w = hc.getStream(hc.h.fa)
 	return
 }
 
@@ -176,4 +258,3 @@ func (hc Conn) Write(b []byte) (n int, err error) {
 	return
 }
 */
-

@@ -13,7 +13,7 @@ import (
 // encrypt/decrypt is done within the type.
 // Compare to 'clientp.go' in this directory to see the equivalence.
 func main() {
-	conn, err := hkex.Dial("tcp", "localhost:2000")
+	conn, err := hkex.Dial("tcp", "localhost:2000", "C_TWOFISH_128")
 	if err != nil {
 		// handle error
 		fmt.Println("Err!")

@@ -27,31 +27,35 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+
+	"golang.org/x/crypto/twofish"
 )
 
 // Available ciphers for hkex.Conn
 const (
-	C_AES_256 = 0  // (TODO: config or pass during KEx Dial()/Accept())  AES-256 cipher
+	C_AES_256     = iota
+	C_TWOFISH_128 // golang.org/x/crypto/twofish
+	C_NONE_DISALLOWED
 )
 
 // Available HMACs for hkex.Conn (TODO: not currently used)
 const (
-	H_SHA256 = 0
+	H_BOGUS = iota
+	H_SHA256
+	H_NONE_DISALLOWED
 )
 
 /*TODO: HMAC derived from HKEx FA.*/
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
-func (hc Conn) getStream(keymat *big.Int, flags uint32) (ret cipher.Stream) {
+func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 	var key []byte
 	var block cipher.Block
 	var err error
 
-	// 256 algs should be enough for everybody.(tm)
-	cipherAlg := (flags & 8)
-	//TODO: flags for HMAC from keymat
-	switch cipherAlg {
+	copts := hc.cipheropts & 0xFF
+	switch copts {
 	case C_AES_256:
 		key = keymat.Bytes()[0:aes.BlockSize]
 		block, err = aes.NewCipher(key)
@@ -61,10 +65,35 @@ func (hc Conn) getStream(keymat *big.Int, flags uint32) (ret cipher.Stream) {
 		//}
 		iv = keymat.Bytes()[aes.BlockSize:]
 		ret = cipher.NewOFB(block, iv)
+		fmt.Printf("[cipher AES_256 (%d)]\n", copts)
+		break
+	case C_TWOFISH_128:
+		key = keymat.Bytes()[0:twofish.BlockSize]
+		block, err = twofish.NewCipher(key)
+		iv := make([]byte, twofish.BlockSize)
+		//if _, err = io.ReadFull(crand.Reader, iv); err != nil {
+		//	panic(err)
+		//}
+		iv = keymat.Bytes()[twofish.BlockSize:]
+		ret = cipher.NewOFB(block, iv)
+		fmt.Printf("[cipher TWOFISH_256 (%d)]\n", copts)
 		break
 	default:
-		fmt.Println("DOOFUS SET A VALID CIPHER ALG")
+		fmt.Printf("DOOFUS SET A VALID CIPHER ALG (%d)\n", copts)
 		block, err = nil, nil
+		os.Exit(1)
+	}
+
+	hopts := (hc.cipheropts >> 8) & 0xFF
+	switch hopts {
+		case H_BOGUS:
+		fmt.Printf("[nop H_BOGUS (%d)]\n", hopts)
+		break
+	case H_SHA256:
+		fmt.Printf("[nop H_SHA256 (%d)]\n", hopts)
+		break
+	default:
+		fmt.Printf("DOOFUS SET A VALID HMAC ALG (%d)\n", hopts)
 		os.Exit(1)
 	}
 
