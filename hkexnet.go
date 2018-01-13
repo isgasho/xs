@@ -31,7 +31,7 @@ import (
 
 /*---------------------------------------------------------------------*/
 
-// A HKex connection - drop-in replacement for net.Conn
+// Conn is a HKex connection - a drop-in replacement for net.Conn
 type Conn struct {
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
@@ -41,24 +41,25 @@ type Conn struct {
 	w          cipher.Stream
 }
 
-// Return the cipher/hmac options value, which is sent to the peer but is
-// not itself part of the KEx.
+// ConnOpts returns the cipher/hmac options value, which is sent to the
+// peer but is not itself part of the KEx.
+//
 // (Used for protocol-level negotiations after KEx such as
 // cipher/HMAC algorithm options etc.)
 func (c *Conn) ConnOpts() uint32 {
 	return c.cipheropts
 }
 
-// Set cipher/hmac options value, which is sent to the peer as part of
-// KEx but not part of the KEx itself.
+// SetConnOpts sets the cipher/hmac options value, which is sent to the
+// peer as part of KEx but not part of the KEx itself.
 //
 // opts - bitfields for cipher and hmac alg. to use after KEx
 func (c *Conn) SetConnOpts(copts uint32) {
 	c.cipheropts = copts
 }
 
-// Return the protocol options value, which is sent to the peer but is
-// not itself part of the KEx or connection (cipher/hmac) setup.
+// Opts returns the protocol options value, which is sent to the peer
+// but is not itself part of the KEx or connection (cipher/hmac) setup.
 //
 // Consumers of this lib may use this for protocol-level options not part
 // of the KEx or encryption info used by the connection.
@@ -66,9 +67,9 @@ func (c *Conn) Opts() uint32 {
 	return c.opts
 }
 
-// Set the protocol options value, which is sent to the peer but is
-// not itself part of the KEx or connection (cipher/hmac) setup.
-
+// SetOpts sets the protocol options value, which is sent to the peer
+// but is not itself part of the KEx or connection (cipher/hmac) setup.
+//
 // Consumers of this lib may use this for protocol-level options not part
 // of the KEx of encryption info used by the connection.
 //
@@ -77,26 +78,28 @@ func (c *Conn) SetOpts(opts uint32) {
 	c.opts = opts
 }
 
-func (hc *Conn) applyConnExtensions(extensions ...string) {
+func (c *Conn) applyConnExtensions(extensions ...string) {
 	for _, s := range extensions {
 		switch s {
 		case "C_AES_256":
-			hc.cipheropts &= (0xFFFFFF00)
-			hc.cipheropts |= C_AES_256
+			fmt.Println("[extension arg = C_AES_256]")
+			c.cipheropts &= (0xFFFFFF00)
+			c.cipheropts |= CAlgAES256
 			break
 		case "C_TWOFISH_128":
 			fmt.Println("[extension arg = C_TWOFISH_128]")
-			hc.cipheropts &= (0xFFFFFF00)
-			hc.cipheropts |= C_TWOFISH_128
+			c.cipheropts &= (0xFFFFFF00)
+			c.cipheropts |= CAlgTwofish128
 			break
 		case "C_BLOWFISH_64":
 			fmt.Println("[extension arg = C_BLOWFISH_64]")
-			hc.cipheropts &= (0xFFFFFF00)
-			hc.cipheropts |= C_BLOWFISH_64
+			c.cipheropts &= (0xFFFFFF00)
+			c.cipheropts |= CAlgBlowfish64
 			break
 		case "H_SHA256":
-			hc.cipheropts &= (0xFFFF00FF)
-			hc.cipheropts |= (H_SHA256 << 8)
+			fmt.Println("[extension arg = H_SHA256]")
+			c.cipheropts &= (0xFFFF00FF)
+			c.cipheropts |= (HmacSHA256 << 8)
 			break
 		default:
 			fmt.Printf("[Dial ext \"%s\" ignored]\n", s)
@@ -147,20 +150,24 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 }
 
 // Close a hkex.Conn
-func (hc *Conn) Close() (err error) {
-	err = hc.c.Close()
+func (c *Conn) Close() (err error) {
+	err = c.c.Close()
 	fmt.Println("[Conn Closing]")
 	return
 }
 
 /*---------------------------------------------------------------------*/
 
-// A hkex Listener, conforming to net.Listener - returns a hkex.Conn
+// HKExListener is a Listener conforming to net.Listener
+//
+// See go doc net.Listener
 type HKExListener struct {
 	l net.Listener
 }
 
-// hkex.Listen, a drop-in replacement for net.Conn.Listen
+// Listen for a connection
+//
+// See go doc net.Listen
 func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 	l, err := net.Listen(protocol, ipport)
 	if err != nil {
@@ -172,12 +179,16 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 }
 
 // Close a hkex Listener
-func (hl *HKExListener) Close() {
-	hl.l.Close()
+//
+// See go doc io.Close
+func (hl *HKExListener) Close() error {
 	fmt.Println("[Listener Closed]")
+	return hl.l.Close()
 }
 
 // Accept a client connection, conforming to net.Listener.Accept()
+//
+// See go doc net.Listener.Accept
 func (hl *HKExListener) Accept() (hc Conn, err error) {
 	c, err := hl.l.Accept()
 	if err != nil {
@@ -211,11 +222,14 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	hc.w = hc.getStream(hc.h.fa)
 	return
 }
-
 /*---------------------------------------------------------------------*/
-func (hc Conn) Read(b []byte) (n int, err error) {
+
+// Read into a byte slice
+//
+// See go doc io.Reader
+func (c Conn) Read(b []byte) (n int, err error) {
 	fmt.Printf("[Decrypting...]\n")
-	n, err = hc.c.Read(b)
+	n, err = c.c.Read(b)
 	if err != nil && err.Error() != "EOF" {
 		panic(err)
 	}
@@ -224,22 +238,28 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 	// The StreamReader acts like a pipe, decrypting
 	// whatever is available and forwarding the result
 	// to the parameter of Read() as a normal io.Reader
-	rs := &cipher.StreamReader{S: hc.r, R: db}
+	rs := &cipher.StreamReader{S: c.r, R: db}
 	n, err = rs.Read(b)
 	fmt.Printf("  ptext:%+v\n", b[:n])
 	return
 }
 
-func (hc Conn) Write(b []byte) (n int, err error) {
+// Write a byte slice
+//
+// See go doc io.Writer
+func (c Conn) Write(b []byte) (n int, err error) {
 	fmt.Printf("[Encrypting...]\n")
 	fmt.Printf("  ptext:%+v\n", b)
 	var wb bytes.Buffer
 	// The StreamWriter acts like a pipe, forwarding whatever is
 	// written to it through the cipher, encrypting as it goes
-	ws := &cipher.StreamWriter{S: hc.w, W: &wb}
-	n, err = ws.Write(b)
+	ws := &cipher.StreamWriter{S: c.w, W: &wb}
+	_, err = ws.Write(b)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Printf("  ctext:%+v\n", wb.Bytes())
-	n, err = hc.c.Write(wb.Bytes())
+	n, err = c.c.Write(wb.Bytes())
 	return
 }
 

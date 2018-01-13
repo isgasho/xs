@@ -1,20 +1,10 @@
-/*  Herradura - a Key exchange scheme in the style of Diffie-Hellman Key Exchange.
-    Copyright (C) 2017 Omar Alejandro Herrera Reyna
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-    golang implementation by Russ Magee (rmagee_at_gmail.com) */
+// Package herradurakex - socket lib conforming to
+// golang.org/pkg/net Conn interface, with
+// experimental key exchange algorithm by
+// Omar Alejandro Herrera Reyna
+// (https://github.com/Caume/HerraduraKEx)
+//
+// See README.md for full license info.
 package herradurakex
 
 /* This is the core KEx algorithm. For client/server net support code,
@@ -38,7 +28,8 @@ type HerraduraKEx struct {
 	fa           *big.Int
 }
 
-// Return a new HerraduraKEx struct.
+// New returns a HerraduraKEx struct.
+//
 //   i - internal (private) random nonce
 //   p - public (exchanged) random nonce (typically 1/4 bitsize of i)
 //
@@ -76,16 +67,16 @@ func (h *HerraduraKEx) rand() (v *big.Int) {
 	return v
 }
 
-// Return max value for an n-bit big.Int
-func (h *HerraduraKEx) getMax() (v *big.Int) {
-	v = big.NewInt(0)
+// getMax returns the max value for an n-bit big.Int
+func (h *HerraduraKEx) getMax() (n *big.Int) {
+	n = big.NewInt(0)
 	var max big.Int
 
 	for i := 0; i < h.intSz; i++ {
-		max.SetBit(v, i, 1)
+		max.SetBit(n, i, 1)
 	}
-	v = &max
-	return v
+	n = &max
+	return n
 }
 
 func (h *HerraduraKEx) bitX(x *big.Int, pos int) (ret int64) {
@@ -120,8 +111,6 @@ func (h *HerraduraKEx) fscx(up, down *big.Int) (result *big.Int) {
 // This is the iteration function using the result of the previous iteration
 // as the first parameter and the second parameter of the first iteration.
 func (h *HerraduraKEx) fscxRevolve(x, y *big.Int, passes int) (result *big.Int) {
-	result = big.NewInt(0)
-
 	result = x
 	for count := 0; count < passes; count++ {
 		result = h.fscx(result, y)
@@ -129,13 +118,13 @@ func (h *HerraduraKEx) fscxRevolve(x, y *big.Int, passes int) (result *big.Int) 
 	return result
 }
 
-// Return the D (FSCX Revolved) value, input to generate FA
+// D returns the D (FSCX Revolved) value, input to generate FA
 // (the value for peer KEx)
 func (h *HerraduraKEx) D() *big.Int {
 	return h.d
 }
 
-// Return the FA value, which must be sent to peer for KEx.
+// FA returns the FA value, which must be sent to peer for KEx.
 func (h *HerraduraKEx) FA() {
 	h.fa = h.fscxRevolve(h.PeerD, h.b, h.intSz-h.pubSz)
 	h.fa.Xor(h.fa, h.a)

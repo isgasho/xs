@@ -1,3 +1,23 @@
+/*  Herradura - a Key exchange scheme in the style of Diffie-Hellman Key Exchange.
+    Copyright (C) 2017 Omar Alejandro Herrera Reyna
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+    golang implementation by Russ Magee (rmagee_at_gmail.com) */
+
+--
+
 This is a drop-in replacement for the golang/pkg/net facilities
 (net.Dial(), net.Listen(), net.Accept() and net.Conn type) using the
 experimental HerraduraKEx 'secure' key exchange algorithm, first released at
@@ -28,6 +48,6 @@ $ go install .
 $ cd demo/
 $ go build client.go && go build server.go
 
-[ in separate shell windows ]
+[ in separate shells ]
 [A]$ ./server
 [B]$ ./client

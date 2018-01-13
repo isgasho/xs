@@ -34,17 +34,16 @@ import (
 
 // Available ciphers for hkex.Conn
 const (
-	C_AES_256     = iota
-	C_TWOFISH_128 // golang.org/x/crypto/twofish
-	C_BLOWFISH_64 // golang.org/x/crypto/blowfish
-	C_NONE_DISALLOWED
+	CAlgAES256     = iota
+	CAlgTwofish128 // golang.org/x/crypto/twofish
+	CAlgBlowfish64 // golang.org/x/crypto/blowfish
+	CAlgNoneDisallowed
 )
 
 // Available HMACs for hkex.Conn (TODO: not currently used)
 const (
-	H_BOGUS = iota
-	H_SHA256
-	H_NONE_DISALLOWED
+	HmacSHA256 = iota
+	HmacNoneDisallowed
 )
 
 /*TODO: HMAC derived from HKEx FA.*/
@@ -61,29 +60,26 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 	// TODO: each cipher alg case should ensure len(keymat.Bytes())
 	// is >= 2*cipher.BlockSize (enough for both key and iv)
 	switch copts {
-	case C_AES_256:
+	case CAlgAES256:
 		key = keymat.Bytes()[0:aes.BlockSize]
 		block, err = aes.NewCipher(key)
 		ivlen = aes.BlockSize
-		iv := make([]byte, aes.BlockSize)
-		iv = keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
+		iv := keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
 		ret = cipher.NewOFB(block, iv)
 		fmt.Printf("[cipher AES_256 (%d)]\n", copts)
 		break
-	case C_TWOFISH_128:
+	case CAlgTwofish128:
 		key = keymat.Bytes()[0:twofish.BlockSize]
 		block, err = twofish.NewCipher(key)
 		ivlen = twofish.BlockSize
-		iv := make([]byte, twofish.BlockSize)
-		iv = keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
+		iv := keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
 		ret = cipher.NewOFB(block, iv)
 		fmt.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
 		break
-	case C_BLOWFISH_64:
+	case CAlgBlowfish64:
 		key = keymat.Bytes()[0:blowfish.BlockSize]
 		block, err = blowfish.NewCipher(key)
 		ivlen = blowfish.BlockSize
-		iv := make([]byte, blowfish.BlockSize)
 		// N.b. Bounds enforcement of differing cipher algorithms
 		// ------------------------------------------------------
 		// cipher/aes and x/cipher/twofish appear to allow one to
@@ -93,23 +89,19 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		//
 		// I assume the other two check bounds and only
 		// copy what's needed whereas blowfish does no such check.
-		iv = keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
+		iv := keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
 		ret = cipher.NewOFB(block, iv)
 		fmt.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
 		break
 	default:
 		fmt.Printf("DOOFUS SET A VALID CIPHER ALG (%d)\n", copts)
-		block, err = nil, nil
 		os.Exit(1)
 	}
 
 	hopts := (hc.cipheropts >> 8) & 0xFF
 	switch hopts {
-	case H_BOGUS:
-		fmt.Printf("[nop H_BOGUS (%d)]\n", hopts)
-		break
-	case H_SHA256:
-		fmt.Printf("[nop H_SHA256 (%d)]\n", hopts)
+	case HmacSHA256:
+		fmt.Printf("[nop HmacSHA256 (%d)]\n", hopts)
 		break
 	default:
 		fmt.Printf("DOOFUS SET A VALID HMAC ALG (%d)\n", hopts)

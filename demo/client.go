@@ -15,11 +15,13 @@ import (
 // Compare to 'clientp.go' in this directory to see the equivalence.
 func main() {
 	var cAlg string
-
+	var hAlg string
+	
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
+	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
 	flag.Parse()
 
-	conn, err := hkex.Dial("tcp", "localhost:2000", cAlg)
+	conn, err := hkex.Dial("tcp", "localhost:2000", cAlg, hAlg)
 	if err != nil {
 		// handle error
 		fmt.Println("Err!")
