@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"os"
 
 	hkex "blitter.com/herradurakex"
 )
@@ -17,7 +19,7 @@ func main() {
 	var cAlg string
 	var hAlg string
 	var server string
-	
+
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
@@ -25,13 +27,11 @@ func main() {
 
 	conn, err := hkex.Dial("tcp", server, cAlg, hAlg)
 	if err != nil {
-		// handle error
 		fmt.Println("Err!")
+		panic(err)
 	}
-	fmt.Fprintf(conn, "\x01\x02\x03\x04")
-	//fmt.Fprintf(conn, "GET / HTTP/1.0\r\n\r\n")
-	//status, err := bufio.NewReader(conn).ReadString('\n')
-	//_, err = bufio.NewReader(conn).ReadString('\n')
-	// ...
-
+	_, err = io.Copy(conn, os.Stdin)
+	if err != nil && err.Error() != "EOF" {
+		fmt.Println(err)
+	}
 }
