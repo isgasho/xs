@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -14,15 +15,20 @@ import (
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
+	var laddr string
+
+	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
+	flag.Parse()
+
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
-	l, err := hkex.Listen("tcp", ":2000")
+	l, err := hkex.Listen("tcp", laddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer l.Close()
 
-	fmt.Println("Serving on port 2000")
+	fmt.Println("Serving on", laddr)
 	for {
 		// Wait for a connection.
 		conn, err := l.Accept()

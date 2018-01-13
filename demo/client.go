@@ -16,12 +16,14 @@ import (
 func main() {
 	var cAlg string
 	var hAlg string
+	var server string
 	
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
+	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
 	flag.Parse()
 
-	conn, err := hkex.Dial("tcp", "localhost:2000", cAlg, hAlg)
+	conn, err := hkex.Dial("tcp", server, cAlg, hAlg)
 	if err != nil {
 		// handle error
 		fmt.Println("Err!")
