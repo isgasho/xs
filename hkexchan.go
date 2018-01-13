@@ -1,25 +1,8 @@
-/*  Herradura - a Key exchange scheme in the style of Diffie-Hellman Key Exchange.
-    Copyright (C) 2017 Omar Alejandro Herrera Reyna
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-    golang implementation by Russ Magee (rmagee_at_gmail.com) */
-
 package herradurakex
 
 /* Support functions to set up encryption once an HKEx Conn has been
-established with FA exchange */
+established with FA exchange and support channel operations
+(echo, file-copy, remote-cmd, ...) */
 
 import (
 	"crypto/aes"
@@ -44,6 +27,16 @@ const (
 const (
 	HmacSHA256 = iota
 	HmacNoneDisallowed
+)
+
+type ChanOp uint8
+
+const (
+	ChanOpNop  = '.'
+	ChanOpEcho = 'e' // For testing - echo client data to stderr
+	//ChanOpFileWrite = "w"
+	//ChanOpFileRead = "r"
+	//ChanOpRemoteCmd = "x"
 )
 
 /*TODO: HMAC derived from HKEx FA.*/

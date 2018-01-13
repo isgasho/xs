@@ -45,6 +45,7 @@ func main() {
 			ch := make(chan []byte)
 			chN := 0
 			eCh := make(chan error)
+			var connOp *byte = nil
 
 			// Start a goroutine to read from our net connection
 			go func(ch chan []byte, eCh chan error) {
@@ -57,12 +58,23 @@ func main() {
 						eCh <- err
 						return
 					}
+					if connOp == nil {
+						// Initial xmit - get op byte
+						// (TODO: determine valid ops
+						//  for now 'e' (echo), 'i' (interactive), 'x' (exec), ... ?)
+						connOp = new(byte)
+						*connOp = data[0]
+						data = data[1:]
+						chN -= 1
+						fmt.Printf("[* connOp '%c']\n", *connOp)
+					}
+
 					// send data if we read some.
 					ch <- data[0:chN]
 				}
 			}(ch, eCh)
 
-			ticker := time.Tick(time.Second/100)
+			ticker := time.Tick(time.Second / 100)
 		Term:
 			// continuously read from the connection
 			for {

@@ -11,10 +11,16 @@ import (
 
 // Demo of a simple client that dials up to a simple test server to
 // send data.
-// Note this code is identical to standard tcp client code, save for
-// declaring a 'hkex' rather than a 'net' Dialer Conn. The KEx and
-// encrypt/decrypt is done within the type.
-// Compare to 'clientp.go' in this directory to see the equivalence.
+//
+// While conforming to the basic net.Conn interface HKex.Conn has extra
+// capabilities designed to allow apps to define connection options,
+// encryption/hmac settings and operations across the encrypted channel.
+//
+// Initial setup is the same as using plain net.Dial(), but one may
+// specify extra extension tags (strings) to set the cipher and hmac
+// setting desired; as well as the intended operation mode for the
+// connection (app-specific, passed through to the server to use or
+// ignore at its discretion).
 func main() {
 	var cAlg string
 	var hAlg string
@@ -30,6 +36,7 @@ func main() {
 		fmt.Println("Err!")
 		panic(err)
 	}
+	fmt.Fprintf(conn,"e") // tell server just to echo
 	_, err = io.Copy(conn, os.Stdin)
 	if err != nil && err.Error() != "EOF" {
 		fmt.Println(err)
