@@ -27,19 +27,25 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"time"
 )
 
 /*---------------------------------------------------------------------*/
 
 // Conn is a HKex connection - a drop-in replacement for net.Conn
 type Conn struct {
+	//net.Conn
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
 	cipheropts uint32 // post-KEx cipher/hmac options
 	opts       uint32 // post-KEx protocol options (caller-defined)
-	op uint8 // post-KEx 'op' (caller-defined)
+	op         uint8  // post-KEx 'op' (caller-defined)
 	r          cipher.Stream
 	w          cipher.Stream
+}
+
+func (c *Conn) SetReadDeadline(t time.Time) error {
+	return c.SetReadDeadline(t)
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -141,7 +147,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	if err != nil {
 		return nil, err
 	}
-	hc = &Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op:0, r: nil, w: nil}
+	hc = &Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op: 0, r: nil, w: nil}
 
 	hc.applyConnExtensions(extensions...)
 
@@ -218,7 +224,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	}
 	fmt.Println("[Accepted]")
 
-	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op:0, r: nil, w: nil}
+	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op: 0, r: nil, w: nil}
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
@@ -243,6 +249,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	hc.w = hc.getStream(hc.h.fa)
 	return
 }
+
 /*---------------------------------------------------------------------*/
 
 // Read into a byte slice
@@ -250,9 +257,15 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
 	fmt.Printf("[Decrypting...]\n")
+
+	//c.c.SetReadDeadline(time.Now().Add(1 * time.Second))
 	n, err = c.c.Read(b)
 	if err != nil && err.Error() != "EOF" {
-		panic(err)
+		//if neterr, ok := err.(net.Error); ok {
+		//	fmt.Printf("[Read() timeout - %s]\n", neterr)
+		//} else {
+		//	panic(err)
+		//}
 	}
 	fmt.Printf("  ctext:%+v\n", b[:n]) // print only used portion
 	db := bytes.NewBuffer(b[:n])

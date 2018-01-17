@@ -35,7 +35,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		fmt.Println("Accepted client")
 
 		// Handle the connection in a new goroutine.
