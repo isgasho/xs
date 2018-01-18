@@ -29,18 +29,11 @@ const (
 type Op uint8
 
 type cmdRunner struct {
-	op           Op
-	who          string
-	arg          string
-	authCookie   string
-	CloseHandler func(*cmdRunner)
-	status       int
-}
-
-func testCloseHandler(r *cmdRunner) {
-	fmt.Println("[testCloseHandler()]")
-	r.arg = "/usr/bin/touch " + r.arg
-	cmd(r)
+	op         Op
+	who        string
+	arg        string
+	authCookie string
+	status     int
 }
 
 func cmd(r *cmdRunner) {
@@ -134,7 +127,7 @@ func main() {
 			}(ch, eCh)
 
 			ticker := time.Tick(time.Second / 100)
-			var r cmdRunner
+			//var r cmdRunner
 			var connOp *byte = nil
 		Term:
 			// continuously read from the connection
@@ -157,12 +150,20 @@ func main() {
 						fmt.Printf("[* connOp '%c']\n", *connOp)
 						// The CloseHandler typically handles the
 						// accumulated command data
-						r = cmdRunner{op: Op(*connOp),
-							who: "larissa", arg: string(data),
-							authCookie:   "c00ki3",
-							CloseHandler: testCloseHandler,
-							status:       0}
-						conn.Write([]byte("SERVER OUTPUT"))
+						//r = cmdRunner{op: Op(*connOp),
+						//	who: "larissa", arg: string(data),
+						//	authCookie:   "c00ki3",
+						//	status:       0}
+					}
+					
+					// From here, one could pass all subsequent data
+					// between client/server attached to an exec.Cmd,
+					// as data to/from a file, etc.
+					conn.Write([]byte("SERVER RESPONSE to '"))
+					conn.Write(data)
+					conn.Write([]byte("'\n"))
+					if strings.Trim(string(data), "\r\n") == "exit" {
+						conn.Close()
 					}
 
 					//fmt.Printf("Client sent %s\n", string(data))
@@ -171,7 +172,6 @@ func main() {
 					// handle our error then exit for loop
 					if err.Error() == "EOF" {
 						fmt.Printf("[Client disconnected]\n")
-						r.CloseHandler(&r)
 					} else {
 						fmt.Printf("Error reading client data! (%+v)\n", err)
 					}
