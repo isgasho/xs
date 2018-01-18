@@ -152,7 +152,8 @@ func main() {
 						*connOp = data[0]
 						data = data[1:chN]
 						chN -= 1
-						
+						// Have op here and first block of data[]
+
 						fmt.Printf("[* connOp '%c']\n", *connOp)
 						// The CloseHandler typically handles the
 						// accumulated command data
@@ -161,6 +162,7 @@ func main() {
 							authCookie:   "c00ki3",
 							CloseHandler: testCloseHandler,
 							status:       0}
+						conn.Write([]byte("SERVER OUTPUT"))
 					}
 
 					//fmt.Printf("Client sent %s\n", string(data))

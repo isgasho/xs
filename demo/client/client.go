@@ -36,7 +36,6 @@ func main() {
 		fmt.Println("Err!")
 		panic(err)
 	}
-	fmt.Fprintf(conn,"e") // tell server just to echo
 	_, err = io.Copy(conn, os.Stdin)
 	if err != nil && err.Error() != "EOF" {
 		fmt.Println(err)
