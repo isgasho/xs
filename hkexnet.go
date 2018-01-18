@@ -25,6 +25,7 @@ import (
 	"bytes"
 	"crypto/cipher"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"time"
@@ -104,27 +105,27 @@ func (c Conn) applyConnExtensions(extensions ...string) {
 	for _, s := range extensions {
 		switch s {
 		case "C_AES_256":
-			fmt.Println("[extension arg = C_AES_256]")
+			log.Println("[extension arg = C_AES_256]")
 			c.cipheropts &= (0xFFFFFF00)
 			c.cipheropts |= CAlgAES256
 			break
 		case "C_TWOFISH_128":
-			fmt.Println("[extension arg = C_TWOFISH_128]")
+			log.Println("[extension arg = C_TWOFISH_128]")
 			c.cipheropts &= (0xFFFFFF00)
 			c.cipheropts |= CAlgTwofish128
 			break
 		case "C_BLOWFISH_64":
-			fmt.Println("[extension arg = C_BLOWFISH_64]")
+			log.Println("[extension arg = C_BLOWFISH_64]")
 			c.cipheropts &= (0xFFFFFF00)
 			c.cipheropts |= CAlgBlowfish64
 			break
 		case "H_SHA256":
-			fmt.Println("[extension arg = H_SHA256]")
+			log.Println("[extension arg = H_SHA256]")
 			c.cipheropts &= (0xFFFF00FF)
 			c.cipheropts |= (HmacSHA256 << 8)
 			break
 		default:
-			fmt.Printf("[Dial ext \"%s\" ignored]\n", s)
+			log.Printf("[Dial ext \"%s\" ignored]\n", s)
 			break
 		}
 	}
@@ -161,10 +162,10 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	}
 
 	hc.h.PeerD = d
-	fmt.Printf("** D:%s\n", hc.h.d.Text(16))
-	fmt.Printf("**(c)** peerD:%s\n", hc.h.PeerD.Text(16))
+	log.Printf("** D:%s\n", hc.h.d.Text(16))
+	log.Printf("**(c)** peerD:%s\n", hc.h.PeerD.Text(16))
 	hc.h.FA()
-	fmt.Printf("**(c)** FA:%s\n", hc.h.fa)
+	log.Printf("**(c)** FA:%s\n", hc.h.fa)
 
 	hc.r = hc.getStream(hc.h.fa)
 	hc.w = hc.getStream(hc.h.fa)
@@ -277,10 +278,10 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 		return hc, err
 	}
 	hc.h.PeerD = d
-	fmt.Printf("** D:%s\n", hc.h.d.Text(16))
-	fmt.Printf("**(s)** peerD:%s\n", hc.h.PeerD.Text(16))
+	log.Printf("** D:%s\n", hc.h.d.Text(16))
+	log.Printf("**(s)** peerD:%s\n", hc.h.PeerD.Text(16))
 	hc.h.FA()
-	fmt.Printf("**(s)** FA:%s\n", hc.h.fa)
+	log.Printf("**(s)** FA:%s\n", hc.h.fa)
 
 	fmt.Fprintf(c, "0x%s\n%08x:%08x:%02x\n", hc.h.d.Text(16),
 		hc.cipheropts, hc.opts, hc.op)
@@ -296,7 +297,7 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 //
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
-	fmt.Printf("[Decrypting...]\n")
+	log.Printf("[Decrypting...]\n")
 
 	//c.c.SetReadDeadline(time.Now().Add(1 * time.Second))
 	n, err = c.c.Read(b)
@@ -307,14 +308,14 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		//	panic(err)
 		//}
 	}
-	fmt.Printf("  ctext:%+v\n", b[:n]) // print only used portion
+	log.Printf("  ctext:%+v\n", b[:n]) // print only used portion
 	db := bytes.NewBuffer(b[:n])
 	// The StreamReader acts like a pipe, decrypting
 	// whatever is available and forwarding the result
 	// to the parameter of Read() as a normal io.Reader
 	rs := &cipher.StreamReader{S: c.r, R: db}
 	n, err = rs.Read(b)
-	fmt.Printf("  ptext:%+v\n", b[:n])
+	log.Printf("  ptext:%+v\n", b[:n])
 	return
 }
 
@@ -322,8 +323,8 @@ func (c Conn) Read(b []byte) (n int, err error) {
 //
 // See go doc io.Writer
 func (c Conn) Write(b []byte) (n int, err error) {
-	fmt.Printf("[Encrypting...]\n")
-	fmt.Printf("  ptext:%+v\n", b)
+	log.Printf("[Encrypting...]\n")
+	log.Printf("  ptext:%+v\n", b)
 	var wb bytes.Buffer
 	// The StreamWriter acts like a pipe, forwarding whatever is
 	// written to it through the cipher, encrypting as it goes
@@ -332,28 +333,7 @@ func (c Conn) Write(b []byte) (n int, err error) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("  ctext:%+v\n", wb.Bytes())
+	log.Printf("  ctext:%+v\n", wb.Bytes())
 	n, err = c.c.Write(wb.Bytes())
 	return
 }
-
-// Return c coerced into a HKEx Conn (which implements interface net.Conn)
-//   Only useful if one wants to convert an open connection later to HKEx
-//   (Use Dial() instead to start with HKEx automatically.)
-/*
- func NewHKExConn(c *net.Conn) (hc *Conn) {
-	hc = new(Conn)
-
-	hc.c = *c
-	hc.h = New(0, 0)
-	d := big.NewInt(0)
-	_, err := fmt.Fscanln(hc.c, d)
-	if err != nil {
-		//
-	}
-	hc.h.PeerD = d
-	fmt.Printf("** D:%s\n", hc.h.d.Text(16))
-	fmt.Printf("** peerD:%s\n", hc.h.PeerD.Text(16))
-	return
-}
-*/

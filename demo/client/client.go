@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"os"
 	"sync"
 
@@ -33,6 +35,8 @@ func main() {
 	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
 	flag.Parse()
+
+	log.SetOutput(ioutil.Discard)
 
 	conn, err := hkex.Dial("tcp", server, cAlg, hAlg)
 	if err != nil {

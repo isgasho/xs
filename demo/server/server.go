@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os/exec"
 	"os/user"
@@ -36,13 +37,14 @@ type cmdRunner struct {
 	status     int
 }
 
-func cmd(r *cmdRunner) {
+/*
+ func cmd(r *cmdRunner) {
 	switch r.op {
 	case OpR:
 		//Clean up r.cmd beforehand
 		r.arg = strings.TrimSpace(r.arg)
 		fmt.Printf("[cmd was:'%s']\n", r.arg)
-		runCmdAs(r.who, r.arg)
+		runCmdAs(r.who, r.arg, nil)
 		fmt.Println(r.arg)
 		break
 	default:
@@ -50,14 +52,15 @@ func cmd(r *cmdRunner) {
 		break
 	}
 }
+*/
 
 // Run a command (via os.exec) as a specific user
-func runCmdAs(who string, cmd string) (err error) {
+func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
 	fmt.Sscanf(u.Gid, "%d", &gid)
-	//fmt.Println("uid:", uid, "gid:", gid)
+	fmt.Println("uid:", uid, "gid:", gid)
 
 	args := strings.Split(cmd, " ")
 	arg0 := args[0]
@@ -65,6 +68,10 @@ func runCmdAs(who string, cmd string) (err error) {
 	c := exec.Command(arg0, args...)
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
+	c.Stdin = conn
+	c.Stdout = conn
+	c.Stderr = conn
+
 	err = c.Run()
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
@@ -83,6 +90,8 @@ func main() {
 
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
 	flag.Parse()
+
+	log.SetOutput(ioutil.Discard)
 
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
@@ -155,13 +164,18 @@ func main() {
 						//	authCookie:   "c00ki3",
 						//	status:       0}
 					}
-					
+
 					// From here, one could pass all subsequent data
 					// between client/server attached to an exec.Cmd,
 					// as data to/from a file, etc.
-					conn.Write([]byte("SERVER RESPONSE to '"))
-					conn.Write(data)
-					conn.Write([]byte("'\n"))
+					if *connOp == 's' {
+						fmt.Println("[Running shell]")
+						runCmdAs("larissa", "bash -l -i", conn)
+						// Returned hopefully via an EOF or exit/logout;
+						// Clear current op so user can enter next, or EOF
+						connOp = nil
+						fmt.Println("[Exiting shell]")
+					}
 					if strings.Trim(string(data), "\r\n") == "exit" {
 						conn.Close()
 					}
