@@ -34,7 +34,6 @@ import (
 
 // Conn is a HKex connection - a drop-in replacement for net.Conn
 type Conn struct {
-	//net.Conn
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
 	cipheropts uint32 // post-KEx cipher/hmac options
@@ -44,16 +43,12 @@ type Conn struct {
 	w          cipher.Stream
 }
 
-func (c *Conn) SetReadDeadline(t time.Time) error {
-	return c.SetReadDeadline(t)
-}
-
 // ConnOpts returns the cipher/hmac options value, which is sent to the
 // peer but is not itself part of the KEx.
 //
 // (Used for protocol-level negotiations after KEx such as
 // cipher/HMAC algorithm options etc.)
-func (c *Conn) ConnOpts() uint32 {
+func (c Conn) ConnOpts() uint32 {
 	return c.cipheropts
 }
 
@@ -61,7 +56,7 @@ func (c *Conn) ConnOpts() uint32 {
 // peer as part of KEx but not part of the KEx itself.
 //
 // opts - bitfields for cipher and hmac alg. to use after KEx
-func (c *Conn) SetConnOpts(copts uint32) {
+func (c Conn) SetConnOpts(copts uint32) {
 	c.cipheropts = copts
 }
 
@@ -70,7 +65,7 @@ func (c *Conn) SetConnOpts(copts uint32) {
 //
 // Consumers of this lib may use this for protocol-level options not part
 // of the KEx or encryption info used by the connection.
-func (c *Conn) Opts() uint32 {
+func (c Conn) Opts() uint32 {
 	return c.opts
 }
 
@@ -81,7 +76,7 @@ func (c *Conn) Opts() uint32 {
 // of the KEx of encryption info used by the connection.
 //
 // opts - a uint32, caller-defined
-func (c *Conn) SetOpts(opts uint32) {
+func (c Conn) SetOpts(opts uint32) {
 	c.opts = opts
 }
 
@@ -90,7 +85,7 @@ func (c *Conn) SetOpts(opts uint32) {
 //
 // Consumers of this lib may use this to indicate connection-specific
 // operations not part of the KEx or encryption info used by the connection.
-func (c *Conn) Op() uint8 {
+func (c Conn) Op() uint8 {
 	return c.op
 }
 
@@ -101,11 +96,11 @@ func (c *Conn) Op() uint8 {
 // operations not part of the KEx or encryption info used by the connection.
 //
 // op - a uint8, caller-defined
-func (c *Conn) SetOp(op uint8) {
+func (c Conn) SetOp(op uint8) {
 	c.op = op
 }
 
-func (c *Conn) applyConnExtensions(extensions ...string) {
+func (c Conn) applyConnExtensions(extensions ...string) {
 	for _, s := range extensions {
 		switch s {
 		case "C_AES_256":
@@ -177,10 +172,55 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 }
 
 // Close a hkex.Conn
-func (c *Conn) Close() (err error) {
+func (c Conn) Close() (err error) {
 	err = c.c.Close()
 	fmt.Println("[Conn Closing]")
 	return
+}
+
+// LocalAddr returns the local network address.
+func (c Conn) LocalAddr() net.Addr {
+	return c.c.LocalAddr()
+}
+
+// RemoteAddr returns the remote network address.
+func (c Conn) RemoteAddr() net.Addr {
+	return c.c.RemoteAddr()
+}
+
+// SetDeadline sets the read and write deadlines associated
+// with the connection. It is equivalent to calling both
+// SetReadDeadline and SetWriteDeadline.
+//
+// A deadline is an absolute time after which I/O operations
+// fail with a timeout (see type Error) instead of
+// blocking. The deadline applies to all future and pending
+// I/O, not just the immediately following call to Read or
+// Write. After a deadline has been exceeded, the connection
+// can be refreshed by setting a deadline in the future.
+//
+// An idle timeout can be implemented by repeatedly extending
+// the deadline after successful Read or Write calls.
+//
+// A zero value for t means I/O operations will not time out.
+func (c Conn) SetDeadline(t time.Time) error {
+	return c.SetDeadline(t)
+}
+
+// SetWriteDeadline sets the deadline for future Write calls
+// and any currently-blocked Write call.
+// Even if write times out, it may return n > 0, indicating that
+// some of the data was successfully written.
+// A zero value for t means Write will not time out.
+func (c Conn) SetWriteDeadline(t time.Time) error {
+	return c.SetWriteDeadline(t)
+}
+
+// SetReadDeadline sets the deadline for future Read calls
+// and any currently-blocked Read call.
+// A zero value for t means Read will not time out.
+func (c Conn) SetReadDeadline(t time.Time) error {
+	return c.SetReadDeadline(t)
 }
 
 /*---------------------------------------------------------------------*/
@@ -208,7 +248,7 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 // Close a hkex Listener
 //
 // See go doc io.Close
-func (hl *HKExListener) Close() error {
+func (hl HKExListener) Close() error {
 	fmt.Println("[Listener Closed]")
 	return hl.l.Close()
 }
@@ -216,7 +256,7 @@ func (hl *HKExListener) Close() error {
 // Accept a client connection, conforming to net.Listener.Accept()
 //
 // See go doc net.Listener.Accept
-func (hl *HKExListener) Accept() (hc Conn, err error) {
+func (hl HKExListener) Accept() (hc Conn, err error) {
 	c, err := hl.l.Accept()
 	if err != nil {
 		return Conn{c: nil, h: nil, cipheropts: 0, opts: 0,
