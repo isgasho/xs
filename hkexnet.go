@@ -175,7 +175,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 // Close a hkex.Conn
 func (c Conn) Close() (err error) {
 	err = c.c.Close()
-	fmt.Println("[Conn Closing]")
+	log.Println("[Conn Closing]")
 	return
 }
 
@@ -241,7 +241,7 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 	if err != nil {
 		return HKExListener{nil}, err
 	}
-	fmt.Println("[Listening]")
+	log.Println("[Listening]")
 	hl.l = l
 	return
 }
@@ -250,7 +250,7 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 //
 // See go doc io.Close
 func (hl HKExListener) Close() error {
-	fmt.Println("[Listener Closed]")
+	log.Println("[Listener Closed]")
 	return hl.l.Close()
 }
 
@@ -263,7 +263,7 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 		return Conn{c: nil, h: nil, cipheropts: 0, opts: 0,
 			r: nil, w: nil}, err
 	}
-	fmt.Println("[Accepted]")
+	log.Println("[Accepted]")
 
 	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op: 0, r: nil, w: nil}
 

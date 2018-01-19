@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	hkex "blitter.com/herradurakex"
+	"github.com/kr/pty"
 )
 
 const (
@@ -36,6 +38,60 @@ type cmdRunner struct {
 	authCookie string
 	status     int
 }
+
+/* ------------- minimal terminal APIs brought in from ssh/terminal
+ * (they have no real business being there as they aren't specific to
+ * ssh.)
+ * -------------
+ */
+
+/*
+// MakeRaw put the terminal connected to the given file descriptor into raw
+// mode and returns the previous state of the terminal so that it can be
+// restored.
+func MakeRaw(fd int) (*State, error) {
+	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
+	if err != nil {
+		return nil, err
+	}
+
+	oldState := State{termios: *termios}
+
+	// This attempts to replicate the behaviour documented for cfmakeraw in
+	// the termios(3) manpage.
+	termios.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
+	termios.Oflag &^= unix.OPOST
+	termios.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
+	termios.Cflag &^= unix.CSIZE | unix.PARENB
+	termios.Cflag |= unix.CS8
+	termios.Cc[unix.VMIN] = 1
+	termios.Cc[unix.VTIME] = 0
+	if err := unix.IoctlSetTermios(fd, ioctlWriteTermios, termios); err != nil {
+		return nil, err
+	}
+
+	return &oldState, nil
+}
+
+// GetState returns the current state of a terminal which may be useful to
+// restore the terminal after a signal.
+func GetState(fd int) (*State, error) {
+	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
+	if err != nil {
+		return nil, err
+	}
+
+	return &State{termios: *termios}, nil
+}
+
+// Restore restores the terminal connected to the given file descriptor to a
+// previous state.
+func Restore(fd int, state *State) error {
+	return unix.IoctlSetTermios(fd, ioctlWriteTermios, &state.termios)
+}
+*/
+
+/* -------------------------------------------------------------- */
 
 /*
  func cmd(r *cmdRunner) {
@@ -72,7 +128,19 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 	c.Stdout = conn
 	c.Stderr = conn
 
-	err = c.Run()
+	// Start the command with a pty.
+	ptmx, err := pty.Start(c) // returns immediately with ptmx file
+	if err != nil {
+		return err
+	}
+	// Make sure to close the pty at the end.
+	defer func() { _ = ptmx.Close() }() // Best effort.
+	// Copy stdin to the pty and the pty to stdout.
+	go func() { _, _ = io.Copy(ptmx, conn) }()
+	_, _ = io.Copy(conn, ptmx)
+
+	//err = c.Run()  // returns when c finishes.
+
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
 		log.Printf("[%s]\n", cmd)
@@ -175,6 +243,7 @@ func main() {
 						// Clear current op so user can enter next, or EOF
 						connOp = nil
 						fmt.Println("[Exiting shell]")
+						conn.Close()
 					}
 					if strings.Trim(string(data), "\r\n") == "exit" {
 						conn.Close()
