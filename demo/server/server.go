@@ -16,6 +16,9 @@ import (
 	"github.com/kr/pty"
 )
 
+// Unused, probably obsolete. Once interactive session
+// and piped I/O one-shot commands are working reconsider
+// how Op might be used
 const (
 	OpR   = 'r' // read(file) (binary mode)
 	OpW   = 'w' // (over)write
@@ -39,78 +42,11 @@ type cmdRunner struct {
 	status     int
 }
 
-/* ------------- minimal terminal APIs brought in from ssh/terminal
- * (they have no real business being there as they aren't specific to
- * ssh.)
- * -------------
- */
-
-/*
-// MakeRaw put the terminal connected to the given file descriptor into raw
-// mode and returns the previous state of the terminal so that it can be
-// restored.
-func MakeRaw(fd int) (*State, error) {
-	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
-	if err != nil {
-		return nil, err
-	}
-
-	oldState := State{termios: *termios}
-
-	// This attempts to replicate the behaviour documented for cfmakeraw in
-	// the termios(3) manpage.
-	termios.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
-	termios.Oflag &^= unix.OPOST
-	termios.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
-	termios.Cflag &^= unix.CSIZE | unix.PARENB
-	termios.Cflag |= unix.CS8
-	termios.Cc[unix.VMIN] = 1
-	termios.Cc[unix.VTIME] = 0
-	if err := unix.IoctlSetTermios(fd, ioctlWriteTermios, termios); err != nil {
-		return nil, err
-	}
-
-	return &oldState, nil
-}
-
-// GetState returns the current state of a terminal which may be useful to
-// restore the terminal after a signal.
-func GetState(fd int) (*State, error) {
-	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
-	if err != nil {
-		return nil, err
-	}
-
-	return &State{termios: *termios}, nil
-}
-
-// Restore restores the terminal connected to the given file descriptor to a
-// previous state.
-func Restore(fd int, state *State) error {
-	return unix.IoctlSetTermios(fd, ioctlWriteTermios, &state.termios)
-}
-*/
-
 /* -------------------------------------------------------------- */
 
-/*
- func cmd(r *cmdRunner) {
-	switch r.op {
-	case OpR:
-		//Clean up r.cmd beforehand
-		r.arg = strings.TrimSpace(r.arg)
-		fmt.Printf("[cmd was:'%s']\n", r.arg)
-		runCmdAs(r.who, r.arg, nil)
-		fmt.Println(r.arg)
-		break
-	default:
-		fmt.Printf("[cmd %d ignored:%d]\n", int(r.op))
-		break
-	}
-}
-*/
-
 // Run a command (via os.exec) as a specific user
+//
+// Uses ptys to support commands which expect a terminal.
 func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
@@ -183,6 +119,7 @@ func main() {
 		// multiple connections may be served concurrently.
 		go func(c hkex.Conn) (e error) {
 			defer c.Close()
+			var connOp *byte = nil
 			ch := make(chan []byte)
 			chN := 0
 			eCh := make(chan error)
@@ -204,8 +141,6 @@ func main() {
 			}(ch, eCh)
 
 			ticker := time.Tick(time.Second / 100)
-			//var r cmdRunner
-			var connOp *byte = nil
 		Term:
 			// continuously read from the connection
 			for {
@@ -216,39 +151,33 @@ func main() {
 					fmt.Printf("Client sent %+v\n", data[0:chN])
 					if connOp == nil {
 						// Initial xmit - get op byte
-						// (TODO: determine valid ops
-						//  for now 'e' (echo), 'i' (interactive), 'x' (exec), ... ?)
+						// Have op here and first block of data[]
 						connOp = new(byte)
 						*connOp = data[0]
+						fmt.Printf("[* connOp '%c']\n", *connOp)
+					}
+					if len(data) > 1 {
 						data = data[1:chN]
 						chN -= 1
-						// Have op here and first block of data[]
-
-						fmt.Printf("[* connOp '%c']\n", *connOp)
-						// The CloseHandler typically handles the
-						// accumulated command data
-						//r = cmdRunner{op: Op(*connOp),
-						//	who: "larissa", arg: string(data),
-						//	authCookie:   "c00ki3",
-						//	status:       0}
 					}
 
-					// From here, one could pass all subsequent data
-					// between client/server attached to an exec.Cmd,
-					// as data to/from a file, etc.
-					if *connOp == 's' {
-						fmt.Println("[Running shell]")
-						runCmdAs("larissa", "bash -l -i", conn)
-						// Returned hopefully via an EOF or exit/logout;
-						// Clear current op so user can enter next, or EOF
-						connOp = nil
-						fmt.Println("[Exiting shell]")
-						conn.Close()
+					if len(data) > 0 {
+						// From here, one could pass all subsequent data
+						// between client/server attached to an exec.Cmd,
+						// as data to/from a file, etc.
+						if connOp != nil && *connOp == 's' {
+							fmt.Println("[Running shell]")
+							runCmdAs("larissa", "bash -l -i", conn)
+							// Returned hopefully via an EOF or exit/logout;
+							// Clear current op so user can enter next, or EOF
+							connOp = nil
+							fmt.Println("[Exiting shell]")
+							conn.Close()
+						}
+						if strings.Trim(string(data), "\r\n") == "exit" {
+							conn.Close()
+						}
 					}
-					if strings.Trim(string(data), "\r\n") == "exit" {
-						conn.Close()
-					}
-
 					//fmt.Printf("Client sent %s\n", string(data))
 				// This case means we got an error and the goroutine has finished
 				case err := <-eCh:

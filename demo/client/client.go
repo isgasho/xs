@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	hkex "blitter.com/herradurakex"
+	isatty "github.com/mattn/go-isatty"
 	"golang.org/x/sys/unix"
 )
 
@@ -31,6 +32,7 @@ func main() {
 	var cAlg string
 	var hAlg string
 	var server string
+	isInteractive := false
 
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
@@ -46,20 +48,27 @@ func main() {
 	}
 	defer conn.Close()
 
-	// Set stdin in raw mode.
-	oldState, err := MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		panic(err)
+	// Set stdin in raw mode if it's an interactive session
+	if isatty.IsTerminal(os.Stdin.Fd()) {
+		isInteractive = true
+		oldState, err := MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			panic(err)
+		}
+		defer func() { _ = Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
+	} else {
+		fmt.Println("NOT A TTY")
 	}
-	defer func() { _ = Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 
 	wg.Add(1)
 	go func() {
-		// This will guarantee the side that closes first
-		// marks its direction's goroutine as finished.
+		// By deferring a call to wg.Done(),
+		// each goroutine guarantees that it marks
+		// its direction's stream as finished.
+		//
 		// Whichever direction's goroutine finishes first
-		// will call wg.Done() once more explicitly to
-		// hang up on the other side so the client
+		// will call wg.Done() once more, explicitly, to
+		// hang up on the other side, so that this client
 		// exits immediately on an EOF from either side.
 		defer wg.Done()
 
@@ -72,8 +81,10 @@ func main() {
 				os.Exit(1)
 			}
 		}
-		log.Println("[Got Write EOF]")
-		wg.Done() // client hanging up, close server read goroutine
+		if isInteractive {
+			log.Println("[Got Write EOF]")
+			wg.Done() // client hanging up, close WaitGroup to exit client
+		}
 	}()
 
 	wg.Add(1)
@@ -90,7 +101,7 @@ func main() {
 			}
 		}
 		log.Println("[Got Read EOF]")
-		wg.Done() // server hung up, close client write goroutine
+		wg.Done() // server hung up, close WaitGroup to exit client
 	}()
 
 	// Wait until both stdin and stdout goroutines finish
@@ -99,13 +110,16 @@ func main() {
 
 /* ------------- minimal terminal APIs brought in from ssh/terminal
  * (they have no real business being there as they aren't specific to
- * ssh.)
+ * ssh, but as of v1.10, early 2018, core go stdlib hasn't yet done
+ * the planned terminal lib reorgs.)
  * -------------
  */
 
+// From github.com/golang/crypto/blob/master/ssh/terminal/util_linux.go
 const ioctlReadTermios = unix.TCGETS
 const ioctlWriteTermios = unix.TCSETS
 
+// From github.com/golang/crypto/blob/master/ssh/terminal/util.go
 // State contains the state of a terminal.
 type State struct {
 	termios unix.Termios
