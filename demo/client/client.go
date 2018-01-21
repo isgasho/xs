@@ -14,6 +14,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type cmdSpec struct {
+	op         []byte
+	who        []byte
+	cmd        []byte
+	authCookie []byte
+	status     int
+}
+
 // Demo of a simple client that dials up to a simple test server to
 // send data.
 //
@@ -39,6 +47,7 @@ func main() {
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
 	flag.Parse()
 
+	//log.SetOutput(os.Stdout)
 	log.SetOutput(ioutil.Discard)
 
 	conn, err := hkex.Dial("tcp", server, cAlg, hAlg)
@@ -60,6 +69,19 @@ func main() {
 		fmt.Println("NOT A TTY")
 	}
 
+	rec := &cmdSpec{op: []byte{'s'},
+		who:        []byte("ABCD"),
+		cmd:        []byte("EFGH"),
+		authCookie: []byte("99"),
+		status:     0}
+
+	_, err = fmt.Fprintf(conn, "%d %d %d %d\n", len(rec.op), len(rec.who), len(rec.cmd), len(rec.authCookie))
+	_, err = conn.Write(rec.op)
+	_, err = conn.Write(rec.who)
+	_, err = conn.Write(rec.cmd)
+	_, err = conn.Write(rec.authCookie)
+
+	//client reader (from server) goroutine
 	wg.Add(1)
 	go func() {
 		// By deferring a call to wg.Done(),
@@ -82,11 +104,12 @@ func main() {
 			}
 		}
 		if isInteractive {
-			log.Println("[Got Write EOF]")
-			wg.Done() // client hanging up, close WaitGroup to exit client
+			log.Println("[Got EOF]")
+			wg.Done() // server hung up, close WaitGroup to exit client
 		}
 	}()
 
+	// client writer (to server) goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -100,8 +123,8 @@ func main() {
 				os.Exit(2)
 			}
 		}
-		log.Println("[Got Read EOF]")
-		wg.Done() // server hung up, close WaitGroup to exit client
+		log.Println("[Sent EOF]")
+		wg.Done() // client hung up, close WaitGroup to exit client
 	}()
 
 	// Wait until both stdin and stdout goroutines finish

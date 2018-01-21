@@ -62,7 +62,7 @@ func main() {
 				}
 			}(ch, eCh)
 
-			ticker := time.Tick(time.Second/100)
+			ticker := time.Tick(time.Second / 100)
 		Term:
 			// continuously read from the connection
 			for {

@@ -39,7 +39,6 @@ type Conn struct {
 	h          *HerraduraKEx
 	cipheropts uint32 // post-KEx cipher/hmac options
 	opts       uint32 // post-KEx protocol options (caller-defined)
-	op         uint8  // post-KEx 'op' (caller-defined)
 	r          cipher.Stream
 	w          cipher.Stream
 }
@@ -57,7 +56,7 @@ func (c Conn) ConnOpts() uint32 {
 // peer as part of KEx but not part of the KEx itself.
 //
 // opts - bitfields for cipher and hmac alg. to use after KEx
-func (c Conn) SetConnOpts(copts uint32) {
+func (c *Conn) SetConnOpts(copts uint32) {
 	c.cipheropts = copts
 }
 
@@ -77,31 +76,11 @@ func (c Conn) Opts() uint32 {
 // of the KEx of encryption info used by the connection.
 //
 // opts - a uint32, caller-defined
-func (c Conn) SetOpts(opts uint32) {
+func (c *Conn) SetOpts(opts uint32) {
 	c.opts = opts
 }
 
-// Op returns the 'op' value, which is sent to the peer
-// but is not itself part of the KEx or connection (cipher/hmac) setup.
-//
-// Consumers of this lib may use this to indicate connection-specific
-// operations not part of the KEx or encryption info used by the connection.
-func (c Conn) Op() uint8 {
-	return c.op
-}
-
-// SetOp sets the 'op' value, which is sent to the peer
-// but is not itself part of the KEx or connection (cipher/hmac) setup.
-//
-// Consumers of this lib may use this to indicate connection-specific
-// operations not part of the KEx or encryption info used by the connection.
-//
-// op - a uint8, caller-defined
-func (c Conn) SetOp(op uint8) {
-	c.op = op
-}
-
-func (c Conn) applyConnExtensions(extensions ...string) {
+func (c *Conn) applyConnExtensions(extensions ...string) {
 	for _, s := range extensions {
 		switch s {
 		case "C_AES_256":
@@ -143,20 +122,20 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	if err != nil {
 		return nil, err
 	}
-	hc = &Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op: 0, r: nil, w: nil}
+	hc = &Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, r: nil, w: nil}
 
 	hc.applyConnExtensions(extensions...)
 
-	fmt.Fprintf(c, "0x%s\n%08x:%08x:%02x\n", hc.h.d.Text(16),
-		hc.cipheropts, hc.opts, hc.op)
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
+		hc.cipheropts, hc.opts)
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
 	if err != nil {
 		return nil, err
 	}
-	_, err = fmt.Fscanf(c, "%08x:%08x:%02x\n",
-		&hc.cipheropts, &hc.opts, &hc.op)
+	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+		&hc.cipheropts, &hc.opts)
 	if err != nil {
 		return nil, err
 	}
@@ -265,15 +244,15 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, op: 0, r: nil, w: nil}
+	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, r: nil, w: nil}
 
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
 	if err != nil {
 		return hc, err
 	}
-	_, err = fmt.Fscanf(c, "%08x:%08x:%02x\n",
-		&hc.cipheropts, &hc.opts, &hc.op)
+	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+		&hc.cipheropts, &hc.opts)
 	if err != nil {
 		return hc, err
 	}
@@ -283,8 +262,8 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	hc.h.FA()
 	log.Printf("**(s)** FA:%s\n", hc.h.fa)
 
-	fmt.Fprintf(c, "0x%s\n%08x:%08x:%02x\n", hc.h.d.Text(16),
-		hc.cipheropts, hc.opts, hc.op)
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
+		hc.cipheropts, hc.opts)
 
 	hc.r = hc.getStream(hc.h.fa)
 	hc.w = hc.getStream(hc.h.fa)
