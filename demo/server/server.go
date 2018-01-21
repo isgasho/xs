@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -14,24 +15,6 @@ import (
 	hkex "blitter.com/herradurakex"
 	"github.com/kr/pty"
 )
-
-// Unused, probably obsolete. Once interactive session
-// and piped I/O one-shot commands are working reconsider
-// how Op might be used
-const (
-	OpR   = 'r' // read(file) (binary mode)
-	OpW   = 'w' // (over)write
-	OpA   = 'a' // append
-	OpRm  = 'd' // rm
-	OpRmD = 'D' // rmdir (rm -rf)
-	OpM   = 'm' // mkdir (-p)
-	OpN   = 'n' // re(n)ame (mv)
-	OpCm  = 'c' // chmod
-	OpCo  = 'C' // chown
-	OpX   = 'x' // exec
-)
-
-//type Op uint8
 
 type cmdSpec struct {
 	op         []byte
@@ -89,12 +72,18 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
+	var dbg bool
 	var laddr string
 
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
+	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
-	log.SetOutput(os.Stdout /*ioutil.Discard*/)
+	if dbg {
+		log.SetOutput(os.Stdout)
+	} else {
+		log.SetOutput(ioutil.Discard)
+	}
 
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
@@ -163,9 +152,17 @@ func main() {
 			fmt.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:%s]\n",
 				rec.op[0], string(rec.who), string(rec.cmd), string(rec.authCookie))
 
-			if rec.op[0] == 's' {
+			if rec.op[0] == 'c' {
+				// Non-interactive command
+				fmt.Println("[Running command]")
+				runCmdAs(string(rec.who), string(rec.cmd), conn)
+				// Returned hopefully via an EOF or exit/logout;
+				// Clear current op so user can enter next, or EOF
+				rec.op[0] = 0
+				fmt.Println("[Command complete]")
+			} else if rec.op[0] == 's' {
 				fmt.Println("[Running shell]")
-				runCmdAs("larissa", "bash -l -i", conn)
+				runCmdAs(string(rec.who), "bash -l -i", conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0

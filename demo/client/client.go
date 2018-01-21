@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
+	"strings"
 	"sync"
 
 	hkex "blitter.com/herradurakex"
@@ -37,18 +39,27 @@ type cmdSpec struct {
 func main() {
 	var wg sync.WaitGroup
 
+	var dbg bool
 	var cAlg string
 	var hAlg string
 	var server string
+	var cmdStr string
+	var altUser string
 	isInteractive := false
 
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
+	flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
+	flag.StringVar(&altUser, "u", "", "specify alternate user")
+	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
-	//log.SetOutput(os.Stdout)
-	log.SetOutput(ioutil.Discard)
+	if dbg {
+		log.SetOutput(os.Stdout)
+	} else {
+		log.SetOutput(ioutil.Discard)
+	}
 
 	conn, err := hkex.Dial("tcp", server, cAlg, hAlg)
 	if err != nil {
@@ -58,8 +69,9 @@ func main() {
 	defer conn.Close()
 
 	// Set stdin in raw mode if it's an interactive session
+	// TODO: send flag to server side indicating this
+	//  affects shell command used
 	if isatty.IsTerminal(os.Stdin.Fd()) {
-		isInteractive = true
 		oldState, err := MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			panic(err)
@@ -69,9 +81,33 @@ func main() {
 		fmt.Println("NOT A TTY")
 	}
 
-	rec := &cmdSpec{op: []byte{'s'},
-		who:        []byte("ABCD"),
-		cmd:        []byte("EFGH"),
+	var uname string
+	if len(altUser) == 0 {
+		u, _ := user.Current()
+		uname = u.Username
+	} else {
+		uname = altUser
+	}
+
+	var op []byte
+	if len(cmdStr) == 0 {
+		op = []byte{'s'}
+		isInteractive = true
+	} else if cmdStr == "-" {
+		op = []byte{'c'}
+		cmdStdin, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			panic(err)
+		}
+		cmdStr = strings.Trim(string(cmdStdin), "\r\n")
+	} else {
+		op = []byte{'c'}
+	}
+
+	rec := &cmdSpec{
+		op:         op,
+		who:        []byte(uname),
+		cmd:        []byte(cmdStr),
 		authCookie: []byte("99"),
 		status:     0}
 
@@ -109,23 +145,25 @@ func main() {
 		}
 	}()
 
-	// client writer (to server) goroutine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	if isInteractive {
+		// client writer (to server) goroutine
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		// io.Copy() expects EOF so this will
-		// exit with outerr == nil
-		_, outerr := io.Copy(conn, os.Stdin)
-		if outerr != nil {
-			if outerr.Error() != "EOF" {
-				fmt.Println(outerr)
-				os.Exit(2)
+			// io.Copy() expects EOF so this will
+			// exit with outerr == nil
+			_, outerr := io.Copy(conn, os.Stdin)
+			if outerr != nil {
+				if outerr.Error() != "EOF" {
+					fmt.Println(outerr)
+					os.Exit(2)
+				}
 			}
-		}
-		log.Println("[Sent EOF]")
-		wg.Done() // client hung up, close WaitGroup to exit client
-	}()
+			log.Println("[Sent EOF]")
+			wg.Done() // client hung up, close WaitGroup to exit client
+		}()
+	}
 
 	// Wait until both stdin and stdout goroutines finish
 	wg.Wait()
