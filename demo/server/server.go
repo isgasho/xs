@@ -4,13 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"os/user"
 	"strings"
 	"syscall"
-	"time"
 
 	hkex "blitter.com/herradurakex"
 	"github.com/kr/pty"
@@ -32,13 +31,13 @@ const (
 	OpX   = 'x' // exec
 )
 
-type Op uint8
+//type Op uint8
 
-type cmdRunner struct {
-	op         Op
-	who        string
-	arg        string
-	authCookie string
+type cmdSpec struct {
+	op         []byte
+	who        []byte
+	cmd        []byte
+	authCookie []byte
 	status     int
 }
 
@@ -95,7 +94,7 @@ func main() {
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
 	flag.Parse()
 
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(os.Stdout /*ioutil.Discard*/)
 
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
@@ -119,85 +118,63 @@ func main() {
 		// multiple connections may be served concurrently.
 		go func(c hkex.Conn) (e error) {
 			defer c.Close()
-			var connOp *byte = nil
-			ch := make(chan []byte)
-			chN := 0
-			eCh := make(chan error)
 
-			// Start a goroutine to read from our net connection
-			go func(ch chan []byte, eCh chan error) {
-				for {
-					// try to read the data
-					data := make([]byte, 512)
-					chN, err = c.Read(data)
-					if err != nil {
-						// send an error if it's encountered
-						eCh <- err
-						return
-					}
-					// send data if we read some.
-					ch <- data[0:chN]
-				}
-			}(ch, eCh)
+			//We use io.ReadFull() here to guarantee we consume
+			//just the data we want for the cmdSpec, and no more.
+			//Otherwise data will be sitting in the channel that isn't
+			//passed down to the command handlers.
+			var rec cmdSpec
+			var len1, len2, len3, len4 uint32
 
-			ticker := time.Tick(time.Second / 100)
-		Term:
-			// continuously read from the connection
-			for {
-				select {
-				// This case means we recieved data on the connection
-				case data := <-ch:
-					// Do something with the data
-					fmt.Printf("Client sent %+v\n", data[0:chN])
-					if connOp == nil {
-						// Initial xmit - get op byte
-						// Have op here and first block of data[]
-						connOp = new(byte)
-						*connOp = data[0]
-						fmt.Printf("[* connOp '%c']\n", *connOp)
-					}
-					if len(data) > 1 {
-						data = data[1:chN]
-						chN -= 1
-					}
-
-					if len(data) > 0 {
-						// From here, one could pass all subsequent data
-						// between client/server attached to an exec.Cmd,
-						// as data to/from a file, etc.
-						if connOp != nil && *connOp == 's' {
-							fmt.Println("[Running shell]")
-							runCmdAs("larissa", "bash -l -i", conn)
-							// Returned hopefully via an EOF or exit/logout;
-							// Clear current op so user can enter next, or EOF
-							connOp = nil
-							fmt.Println("[Exiting shell]")
-							conn.Close()
-						}
-						if strings.Trim(string(data), "\r\n") == "exit" {
-							conn.Close()
-						}
-					}
-					//fmt.Printf("Client sent %s\n", string(data))
-				// This case means we got an error and the goroutine has finished
-				case err := <-eCh:
-					// handle our error then exit for loop
-					if err.Error() == "EOF" {
-						fmt.Printf("[Client disconnected]\n")
-					} else {
-						fmt.Printf("Error reading client data! (%+v)\n", err)
-					}
-					break Term
-				// This will timeout on the read.
-				case <-ticker:
-					// do nothing? this is just so we can time out if we need to.
-					// you probably don't even need to have this here unless you want
-					// do something specifically on the timeout.
-				}
+			n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
+			if err != nil || n < 4 {
+				fmt.Println("[Bad cmdSpec fmt]")
+				return err
 			}
-			// Shut down the connection.
-			//c.Close()
+			fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
+
+			rec.op = make([]byte, len1, len1)
+			_, err = io.ReadFull(c, rec.op)
+			if err != nil {
+				fmt.Println("[Bad cmdSpec.op]")
+				return err
+			}
+			rec.who = make([]byte, len2, len2)
+			_, err = io.ReadFull(c, rec.who)
+			if err != nil {
+				fmt.Println("[Bad cmdSpec.who]")
+				return err
+			}
+
+			rec.cmd = make([]byte, len3, len3)
+			_, err = io.ReadFull(c, rec.cmd)
+			if err != nil {
+				fmt.Println("[Bad cmdSpec.cmd]")
+				return err
+			}
+
+			rec.authCookie = make([]byte, len4, len4)
+			_, err = io.ReadFull(c, rec.authCookie)
+			if err != nil {
+				fmt.Println("[Bad cmdSpec.authCookie]")
+				return err
+			}
+
+			fmt.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:%s]\n",
+				rec.op[0], string(rec.who), string(rec.cmd), string(rec.authCookie))
+
+			if rec.op[0] == 's' {
+				fmt.Println("[Running shell]")
+				runCmdAs("larissa", "bash -l -i", conn)
+				// Returned hopefully via an EOF or exit/logout;
+				// Clear current op so user can enter next, or EOF
+				rec.op[0] = 0
+				fmt.Println("[Exiting shell]")
+			} else {
+				fmt.Println("[Bad cmdSpec]")
+			}
 			return
 		}(conn)
-	}
+	} //endfor
+	fmt.Println("[Exiting]")
 }

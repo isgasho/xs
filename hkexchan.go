@@ -8,6 +8,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"log"
 	"math/big"
 	"os"
 
@@ -27,16 +28,6 @@ const (
 const (
 	HmacSHA256 = iota
 	HmacNoneDisallowed
-)
-
-type ChanOp uint8
-
-const (
-	ChanOpNop  = '.'
-	ChanOpEcho = 'e' // For testing - echo client data to stderr
-	//ChanOpFileWrite = "w"
-	//ChanOpFileRead = "r"
-	//ChanOpRemoteCmd = "x"
 )
 
 /*TODO: HMAC derived from HKEx FA.*/
@@ -59,7 +50,7 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		ivlen = aes.BlockSize
 		iv := keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
 		ret = cipher.NewOFB(block, iv)
-		fmt.Printf("[cipher AES_256 (%d)]\n", copts)
+		log.Printf("[cipher AES_256 (%d)]\n", copts)
 		break
 	case CAlgTwofish128:
 		key = keymat.Bytes()[0:twofish.BlockSize]
@@ -67,7 +58,7 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		ivlen = twofish.BlockSize
 		iv := keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
 		ret = cipher.NewOFB(block, iv)
-		fmt.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
+		log.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
 		break
 	case CAlgBlowfish64:
 		key = keymat.Bytes()[0:blowfish.BlockSize]
@@ -84,9 +75,10 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		// copy what's needed whereas blowfish does no such check.
 		iv := keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
 		ret = cipher.NewOFB(block, iv)
-		fmt.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
+		log.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
 		break
 	default:
+		log.Printf("[invalid cipher (%d)]\n", copts)
 		fmt.Printf("DOOFUS SET A VALID CIPHER ALG (%d)\n", copts)
 		os.Exit(1)
 	}
@@ -94,9 +86,10 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 	hopts := (hc.cipheropts >> 8) & 0xFF
 	switch hopts {
 	case HmacSHA256:
-		fmt.Printf("[nop HmacSHA256 (%d)]\n", hopts)
+		log.Printf("[nop HmacSHA256 (%d)]\n", hopts)
 		break
 	default:
+		log.Printf("[invalid hmac (%d)]\n", hopts)
 		fmt.Printf("DOOFUS SET A VALID HMAC ALG (%d)\n", hopts)
 		os.Exit(1)
 	}
