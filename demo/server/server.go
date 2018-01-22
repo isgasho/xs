@@ -108,6 +108,11 @@ func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err e
 	return
 }
 
+func rejectUserMsg() string {
+		// TODO: Use Shakespeare insult generator. :p
+		return "Invalid user\r\n"
+}
+
 // Demo of a simple server that listens and spawns goroutines for each
 // connecting client. Note this code is identical to standard tcp
 // server code, save for declaring 'hkex' rather than 'net'
@@ -193,6 +198,14 @@ func main() {
 
 			fmt.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:%s]\n",
 				rec.op[0], string(rec.who), string(rec.cmd), string(rec.authCookie))
+
+			valid, allowedCmds := hkex.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
+			if !valid {
+					log.Println("Invalid user", string(rec.who))
+					c.Write([]byte(rejectUserMsg()))
+					return
+			}
+			log.Printf("[allowedCmds:%s]\n", allowedCmds)
 
 			if rec.op[0] == 'c' {
 				// Non-interactive command

@@ -45,6 +45,7 @@ func main() {
 	var server string
 	var cmdStr string
 	var altUser string
+	var authCookie string
 	isInteractive := false
 
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
@@ -52,6 +53,7 @@ func main() {
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
 	flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
 	flag.StringVar(&altUser, "u", "", "specify alternate user")
+	flag.StringVar(&authCookie, "a", "", "auth cookie (MultiCheese3999(tm) 2FA cookie")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
@@ -78,7 +80,7 @@ func main() {
 		}
 		defer func() { _ = Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 	} else {
-		fmt.Println("NOT A TTY")
+		log.Println("NOT A TTY")
 	}
 
 	var uname string
@@ -104,11 +106,20 @@ func main() {
 		op = []byte{'c'}
 	}
 
+	if len(authCookie) == 0 {
+		fmt.Printf("Gimme cookie:")
+		ab, err := ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			panic(err)
+		}
+		authCookie = string(ab)
+	}
+
 	rec := &cmdSpec{
 		op:         op,
 		who:        []byte(uname),
 		cmd:        []byte(cmdStr),
-		authCookie: []byte("99"),
+		authCookie: []byte(authCookie),
 		status:     0}
 
 	_, err = fmt.Fprintf(conn, "%d %d %d %d\n", len(rec.op), len(rec.who), len(rec.cmd), len(rec.authCookie))
@@ -228,4 +239,64 @@ func GetState(fd int) (*State, error) {
 // previous state.
 func Restore(fd int, state *State) error {
 	return unix.IoctlSetTermios(fd, ioctlWriteTermios, &state.termios)
+}
+
+// ReadPassword reads a line of input from a terminal without local echo.  This
+// is commonly used for inputting passwords and other sensitive data. The slice
+// returned does not include the \n.
+func ReadPassword(fd int) ([]byte, error) {
+	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
+	if err != nil {
+		return nil, err
+	}
+
+	newState := *termios
+	newState.Lflag &^= unix.ECHO
+	newState.Lflag |= unix.ICANON | unix.ISIG
+	newState.Iflag |= unix.ICRNL
+	if err := unix.IoctlSetTermios(fd, ioctlWriteTermios, &newState); err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		unix.IoctlSetTermios(fd, ioctlWriteTermios, termios)
+	}()
+
+	return readPasswordLine(passwordReader(fd))
+}
+
+// passwordReader is an io.Reader that reads from a specific file descriptor.
+type passwordReader int
+
+func (r passwordReader) Read(buf []byte) (int, error) {
+	return unix.Read(int(r), buf)
+}
+
+// readPasswordLine reads from reader until it finds \n or io.EOF.
+// The slice returned does not include the \n.
+// readPasswordLine also ignores any \r it finds.
+func readPasswordLine(reader io.Reader) ([]byte, error) {
+	var buf [1]byte
+	var ret []byte
+
+	for {
+		n, err := reader.Read(buf[:])
+		if n > 0 {
+			switch buf[0] {
+			case '\n':
+				return ret, nil
+			case '\r':
+				// remove \r from passwords on Windows
+			default:
+				ret = append(ret, buf[0])
+			}
+			continue
+		}
+		if err != nil {
+			if err == io.EOF && len(ret) > 0 {
+				return ret, nil
+			}
+			return ret, err
+		}
+	}
 }
