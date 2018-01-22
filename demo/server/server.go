@@ -66,6 +66,48 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 	return
 }
 
+// Run a command (via default shell) as a specific user
+//
+// Uses ptys to support commands which expect a terminal.
+func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err error) {
+	u, _ := user.Lookup(who)
+	var uid, gid uint32
+	fmt.Sscanf(u.Uid, "%d", &uid)
+	fmt.Sscanf(u.Gid, "%d", &gid)
+	fmt.Println("uid:", uid, "gid:", gid)
+
+	var c *exec.Cmd
+	if interactive {
+		c = exec.Command("/bin/bash", "-i")
+	} else {
+		c = exec.Command("/bin/bash", "-c", cmd)
+	}
+	c.SysProcAttr = &syscall.SysProcAttr{}
+	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
+	c.Stdin = conn
+	c.Stdout = conn
+	c.Stderr = conn
+
+	// Start the command with a pty.
+	ptmx, err := pty.Start(c) // returns immediately with ptmx file
+	if err != nil {
+		return err
+	}
+	// Make sure to close the pty at the end.
+	defer func() { _ = ptmx.Close() }() // Best effort.
+	// Copy stdin to the pty and the pty to stdout.
+	go func() { _, _ = io.Copy(ptmx, conn) }()
+	_, _ = io.Copy(conn, ptmx)
+
+	//err = c.Run()  // returns when c finishes.
+
+	if err != nil {
+		log.Printf("Command finished with error: %v", err)
+		log.Printf("[%s]\n", cmd)
+	}
+	return
+}
+
 // Demo of a simple server that listens and spawns goroutines for each
 // connecting client. Note this code is identical to standard tcp
 // server code, save for declaring 'hkex' rather than 'net'
@@ -155,14 +197,14 @@ func main() {
 			if rec.op[0] == 'c' {
 				// Non-interactive command
 				fmt.Println("[Running command]")
-				runCmdAs(string(rec.who), string(rec.cmd), conn)
+				runShellAs(string(rec.who), string(rec.cmd), false, conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
 				fmt.Println("[Command complete]")
 			} else if rec.op[0] == 's' {
 				fmt.Println("[Running shell]")
-				runCmdAs(string(rec.who), "bash -l -i", conn)
+				runShellAs(string(rec.who), string(rec.cmd), true, conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
