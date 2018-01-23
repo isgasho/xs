@@ -18,10 +18,10 @@
 
 --
 
-This is a drop-in replacement for the golang/pkg/net facilities
-(net.Dial(), net.Listen(), net.Accept() and net.Conn type) using the
+Package herradurakex is a drop-in replacement for golang/pkg/net facilities
+(net.Dial(), net.Listen(), net.Accept() and the net.Conn type) using the
 experimental HerraduraKEx 'secure' key exchange algorithm, first released at
-github.com/Caume/HerraduraKEx
+(Omar Elejandro Herrera Reyna's github page)[github.com/Caume/HerraduraKEx].
 
 One can simply replace calls to net.Dial() with hkex.Dial(), and likewise
 net.Listen() with hkex.Listen(), to obtain connections (hkex.Conn) conforming

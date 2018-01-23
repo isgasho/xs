@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	hkex "blitter.com/herradurakex"
+	"blitter.com/spinsult"
 	"github.com/kr/pty"
 )
 
@@ -109,8 +110,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err e
 }
 
 func rejectUserMsg() string {
-		// TODO: Use Shakespeare insult generator. :p
-		return "Invalid user\r\n"
+	return "Begone, " + spinsult.GetSentence() + "\r\n"
 }
 
 // Demo of a simple server that listens and spawns goroutines for each
@@ -201,9 +201,9 @@ func main() {
 
 			valid, allowedCmds := hkex.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
 			if !valid {
-					log.Println("Invalid user", string(rec.who))
-					c.Write([]byte(rejectUserMsg()))
-					return
+				log.Println("Invalid user", string(rec.who))
+				c.Write([]byte(rejectUserMsg()))
+				return
 			}
 			log.Printf("[allowedCmds:%s]\n", allowedCmds)
 
