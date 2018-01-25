@@ -16,7 +16,12 @@ import (
 )
 
 func AuthUser(username string, auth string, fname string) (valid bool, allowedCmds string) {
-	b, _ := ioutil.ReadFile(fname)
+	b, e := ioutil.ReadFile(fname)
+	if e != nil {
+		valid = false
+		fmt.Println("ERROR: Cannot read hkexsh.passwd file!")
+		log.Fatal(e)
+	}
 	r := csv.NewReader(bytes.NewReader(b))
 
 	b = nil
@@ -42,7 +47,7 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 			break
 		}
 
-		fmt.Println(record)
+		//fmt.Println(record)
 	}
 	return
 }

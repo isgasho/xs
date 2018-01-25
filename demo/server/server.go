@@ -12,8 +12,9 @@ import (
 	"strings"
 	"syscall"
 
+	"../spinsult"
+
 	hkex "blitter.com/herradurakex"
-	"blitter.com/spinsult"
 	"github.com/kr/pty"
 )
 
@@ -167,7 +168,7 @@ func main() {
 				fmt.Println("[Bad cmdSpec fmt]")
 				return err
 			}
-			fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
+			//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
 
 			rec.op = make([]byte, len1, len1)
 			_, err = io.ReadFull(c, rec.op)
@@ -196,8 +197,8 @@ func main() {
 				return err
 			}
 
-			fmt.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:%s]\n",
-				rec.op[0], string(rec.who), string(rec.cmd), string(rec.authCookie))
+			log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
+				rec.op[0], string(rec.who), string(rec.cmd))
 
 			valid, allowedCmds := hkex.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
 			if !valid {
@@ -209,21 +210,21 @@ func main() {
 
 			if rec.op[0] == 'c' {
 				// Non-interactive command
-				fmt.Println("[Running command]")
+				log.Println("[Running command]")
 				runShellAs(string(rec.who), string(rec.cmd), false, conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
-				fmt.Println("[Command complete]")
+				log.Println("[Command complete]")
 			} else if rec.op[0] == 's' {
-				fmt.Println("[Running shell]")
+				log.Println("[Running shell]")
 				runShellAs(string(rec.who), string(rec.cmd), true, conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
-				fmt.Println("[Exiting shell]")
+				log.Println("[Exiting shell]")
 			} else {
-				fmt.Println("[Bad cmdSpec]")
+				log.Println("[Bad cmdSpec]")
 			}
 			return
 		}(conn)

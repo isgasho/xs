@@ -93,7 +93,7 @@ func main() {
 		log.Fatal(err)
 	}
 	for i, _ := range records {
-		fmt.Println(records[i])
+		//fmt.Println(records[i])
 		if records[i][0] == uname {
 			records[i][1] = salt
 			records[i][2] = hash
