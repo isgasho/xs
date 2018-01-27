@@ -225,12 +225,20 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 	return
 }
 
-// Close a hkex Listener
+// Close a hkex Listener - closes the Listener.
+// Any blocked Accept operations will be unblocked and return errors.
 //
-// See go doc io.Close
+// See go doc net.Listener.Close
 func (hl HKExListener) Close() error {
 	log.Println("[Listener Closed]")
 	return hl.l.Close()
+}
+
+// Addr returns a the listener's network address.
+//
+// See go doc net.Listener.Addr
+func (hl HKExListener) Addr() net.Addr {
+		return hl.l.Addr()
 }
 
 // Accept a client connection, conforming to net.Listener.Accept()

@@ -78,12 +78,27 @@ func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err e
 	fmt.Sscanf(u.Gid, "%d", &gid)
 	fmt.Println("uid:", uid, "gid:", gid)
 
+	// Need to clear server's env and set key vars of the
+	// target user. This isn't perfect (TERM doesn't seem to
+	// work 100%; ANSI/xterm colour isn't working even
+	// if we set "xterm" or "ansi" here; and line count
+	// reported by 'stty -a' defaults to 24 regardless
+	// of client shell window used to run client.
+	// Investigate -- rlm 2018-01-26)
+	os.Clearenv()
+	os.Setenv("HOME", u.HomeDir)
+	os.Setenv("TERM", "vt102") // TODO: server or client option?
+
 	var c *exec.Cmd
 	if interactive {
-		c = exec.Command("/bin/bash", "-i")
+		c = exec.Command("/bin/bash", "-i", "-l")
 	} else {
 		c = exec.Command("/bin/bash", "-c", cmd)
 	}
+	//If os.Clearenv() isn't called by server above these will be seen in the
+	//client's session env.
+	//c.Env = []string{"HOME=" + u.HomeDir, "SUDO_GID=", "SUDO_UID=", "SUDO_USER=", "SUDO_COMMAND=", "MAIL=", "LOGNAME="+who}
+	c.Dir = u.HomeDir
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdin = conn
@@ -215,14 +230,14 @@ func main() {
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
-				log.Println("[Command complete]")
+				fmt.Println("[Command complete]")
 			} else if rec.op[0] == 's' {
 				log.Println("[Running shell]")
 				runShellAs(string(rec.who), string(rec.cmd), true, conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
-				log.Println("[Exiting shell]")
+				fmt.Println("[Exiting shell]")
 			} else {
 				log.Println("[Bad cmdSpec]")
 			}

@@ -1,14 +1,17 @@
 Package herradurakex is a drop-in replacement for golang/pkg/net facilities
-(net.Dial(), net.Listen(), net.Accept() and the net.Conn type) using the
-experimental HerraduraKEx key exchange algorithm, first released at
-(Omar Elejandro Herrera Reyna's github page)[github.com/Caume/HerraduraKEx].
+(net.Dial(), net.Listen(), net.Accept() and the net.Conn type), yielding
+'secure' sockets using the experimental HerraduraKEx key exchange algorithm
+first released by (Omar Elejandro Herrera Reyna's github page)[github.com/Caume/HerraduraKEx].
 
 One can simply replace calls to net.Dial() with hkex.Dial(), and likewise
 net.Listen() with hkex.Listen(), to obtain connections (hkex.Conn) conforming
 to the basic net.Conn interface. Upon Dial(), the HerraduraKEx key exchange
 is initiated (whereby client and server independently derive the same
-keying material) and session algorithms to be used are exchanged allowing an
-encrypted channel between client and server.
+keying material).
+
+Above this layer, apps (such as the demo/server/ and demo/client code) can
+then negotiate session settings (cipher/hmac algorithms, etc.) to be used
+for further communication.
 
 NOTE: Due to the experimental nature of the HerraduraKEx algorithm used to
 derive crypto keying material on each end, this algorithm and the
@@ -40,7 +43,7 @@ $ go build demo/client/client.go && go build demo/server/server.go
 $ go build demo/hkexpasswd/hkexpasswd.go
 
 [To set accounts & passwords]
-$ sudo echo "joebloggs:*:*:*" >/etc/hkex.passwd
+$ sudo echo "joebloggs:*:*:*" >/etc/hkexsh.passwd
 $ sudo ./hkexpasswd -u joebloggs
 
 [ in separate shells ]
