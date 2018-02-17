@@ -210,7 +210,9 @@ func main() {
 				log.Println("[Bad cmdSpec.authCookie]")
 				return err
 			}
-
+			
+			conn.EnableHMAC()
+			
 			log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
 				rec.op[0], string(rec.who), string(rec.cmd))
 

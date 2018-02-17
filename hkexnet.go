@@ -40,12 +40,18 @@ import (
 type Conn struct {
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
+	hmacOn     bool // turned on once channel param negotiation is done
+	byteCount  int
 	cipheropts uint32        // post-KEx cipher/hmac options
 	opts       uint32        // post-KEx protocol options (caller-defined)
 	r          cipher.Stream //read cipherStream
 	rm         hash.Hash
 	w          cipher.Stream //write cipherStream
 	wm         hash.Hash
+}
+
+func (c *Conn) EnableHMAC() {
+	c.hmacOn = true
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -310,6 +316,13 @@ func (c Conn) Read(b []byte) (n int, err error) {
 	rs := &cipher.StreamReader{S: c.r, R: db}
 	n, err = rs.Read(b)
 	log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n]))
+
+	if c.hmacOn {
+			c.rm.Write(b[:n])
+			c.byteCount += len(b[:n])
+		fmt.Printf("(%x) HMAC:%x\r\n", c.byteCount, c.rm.Sum(nil))
+	}
+
 	return
 }
 
@@ -319,6 +332,13 @@ func (c Conn) Read(b []byte) (n int, err error) {
 func (c Conn) Write(b []byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
 	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b)) //EncodeToString(b))
+
+	if c.hmacOn {
+		c.wm.Write(b)
+		c.byteCount += len(b)
+		fmt.Printf("(%x) HMAC:%x\r\n", c.byteCount, c.wm.Sum(nil))
+	}
+
 	var wb bytes.Buffer
 	// The StreamWriter acts like a pipe, forwarding whatever is
 	// written to it through the cipher, encrypting as it goes
