@@ -5,15 +5,21 @@ established with FA exchange and support channel operations
 (echo, file-copy, remote-cmd, ...) */
 
 import (
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"hash"
 	"log"
 	"math/big"
 	"os"
 
 	"golang.org/x/crypto/blowfish"
 	"golang.org/x/crypto/twofish"
+	// hash algos must be manually imported thusly:
+	// (Would be nice if the golang pkg docs were more clear
+	// on this...)
+	_ "crypto/sha256"
 )
 
 // Available ciphers for hkex.Conn
@@ -34,7 +40,7 @@ const (
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
-func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
+func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 	var key []byte
 	var block cipher.Block
 	var ivlen int
@@ -49,7 +55,7 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		block, err = aes.NewCipher(key)
 		ivlen = aes.BlockSize
 		iv := keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
-		ret = cipher.NewOFB(block, iv)
+		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher AES_256 (%d)]\n", copts)
 		break
 	case CAlgTwofish128:
@@ -57,7 +63,7 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		block, err = twofish.NewCipher(key)
 		ivlen = twofish.BlockSize
 		iv := keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
-		ret = cipher.NewOFB(block, iv)
+		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
 		break
 	case CAlgBlowfish64:
@@ -74,7 +80,7 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 		// I assume the other two check bounds and only
 		// copy what's needed whereas blowfish does no such check.
 		iv := keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
-		ret = cipher.NewOFB(block, iv)
+		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
 		break
 	default:
@@ -86,7 +92,12 @@ func (hc Conn) getStream(keymat *big.Int) (ret cipher.Stream) {
 	hopts := (hc.cipheropts >> 8) & 0xFF
 	switch hopts {
 	case HmacSHA256:
-		log.Printf("[nop HmacSHA256 (%d)]\n", hopts)
+		log.Printf("[hash HmacSHA256 (%d)]\n", hopts)
+		halg := crypto.SHA256
+		mc = halg.New()
+		if !halg.Available() {
+			log.Fatal("hash not available!")
+		}
 		break
 	default:
 		log.Printf("[invalid hmac (%d)]\n", hopts)

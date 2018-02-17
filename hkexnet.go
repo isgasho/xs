@@ -24,7 +24,10 @@ package herradurakex
 import (
 	"bytes"
 	"crypto/cipher"
+	"encoding/hex"
 	"fmt"
+	"hash"
+	"io"
 	"log"
 	"math/big"
 	"net"
@@ -37,10 +40,12 @@ import (
 type Conn struct {
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
-	cipheropts uint32 // post-KEx cipher/hmac options
-	opts       uint32 // post-KEx protocol options (caller-defined)
-	r          cipher.Stream
-	w          cipher.Stream
+	cipheropts uint32        // post-KEx cipher/hmac options
+	opts       uint32        // post-KEx protocol options (caller-defined)
+	r          cipher.Stream //read cipherStream
+	rm         hash.Hash
+	w          cipher.Stream //write cipherStream
+	wm         hash.Hash
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -146,8 +151,8 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	hc.h.FA()
 	log.Printf("**(c)** FA:%s\n", hc.h.fa)
 
-	hc.r = hc.getStream(hc.h.fa)
-	hc.w = hc.getStream(hc.h.fa)
+	hc.r, hc.rm = hc.getStream(hc.h.fa)
+	hc.w, hc.wm = hc.getStream(hc.h.fa)
 	return
 }
 
@@ -238,7 +243,7 @@ func (hl HKExListener) Close() error {
 //
 // See go doc net.Listener.Addr
 func (hl HKExListener) Addr() net.Addr {
-		return hl.l.Addr()
+	return hl.l.Addr()
 }
 
 // Accept a client connection, conforming to net.Listener.Accept()
@@ -273,8 +278,8 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
 		hc.cipheropts, hc.opts)
 
-	hc.r = hc.getStream(hc.h.fa)
-	hc.w = hc.getStream(hc.h.fa)
+	hc.r, hc.rm = hc.getStream(hc.h.fa)
+	hc.w, hc.wm = hc.getStream(hc.h.fa)
 	return
 }
 

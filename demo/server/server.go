@@ -12,9 +12,8 @@ import (
 	"strings"
 	"syscall"
 
-	"../spinsult"
-
-	hkex "blitter.com/herradurakex"
+	hkex "github.com/Russtopia/hkexsh"
+	"github.com/Russtopia/hkexsh/demo/spinsult"
 	"github.com/kr/pty"
 )
 

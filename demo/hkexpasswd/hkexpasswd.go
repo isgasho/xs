@@ -12,7 +12,7 @@ import (
 	"os"
 	"os/user"
 
-	hkex "blitter.com/herradurakex"
+	hkex "github.com/Russtopia/hkexsh"
 	"github.com/jameskeane/bcrypt"
 )
 
