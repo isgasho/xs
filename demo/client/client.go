@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	hkex "github.com/Russtopia/hkexsh"
+	hkex "blitter.com/hkexsh"
 	isatty "github.com/mattn/go-isatty"
 )
 
