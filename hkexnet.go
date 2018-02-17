@@ -27,6 +27,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
+	"io"
 	"log"
 	"math/big"
 	"net"
@@ -40,8 +41,7 @@ import (
 type Conn struct {
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
-	hmacOn     bool // turned on once channel param negotiation is done
-	byteCount  int
+	hmacOn     bool          // turned on once channel param negotiation is done
 	cipheropts uint32        // post-KEx cipher/hmac options
 	opts       uint32        // post-KEx protocol options (caller-defined)
 	r          cipher.Stream //read cipherStream
@@ -296,8 +296,16 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
 	//log.Printf("[Decrypting...]\r\n")
+	var hIn []byte = make([]byte, 1, 1)
 
+	if c.hmacOn {
+		_, _ = io.ReadFull(c.c, hIn)
+		//if e != nil {
+		//	panic(e)
+		//}
+	}
 	n, err = c.c.Read(b)
+
 	// Normal client 'exit' from interactive session will cause
 	// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 	if err != nil && err.Error() != "EOF" {
@@ -307,6 +315,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 			log.Println("[Client hung up]")
 		}
 	}
+
 	log.Printf("  <:ctext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n])) // print only used portion
 
 	db := bytes.NewBuffer(b[:n])
@@ -314,13 +323,15 @@ func (c Conn) Read(b []byte) (n int, err error) {
 	// whatever is available and forwarding the result
 	// to the parameter of Read() as a normal io.Reader
 	rs := &cipher.StreamReader{S: c.r, R: db}
+	// FIXME: Possibly the bug here -- Read() may get grouped writes from
+	// server side, causing loss of hmac sync. -rlm 2018-0-16
 	n, err = rs.Read(b)
 	log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n]))
 
 	if c.hmacOn {
-			c.rm.Write(b[:n])
-			c.byteCount += len(b[:n])
-		fmt.Printf("(%x) HMAC:%x\r\n", c.byteCount, c.rm.Sum(nil))
+		c.rm.Write(b[:n])
+		hTmp := c.rm.Sum(nil)[0]
+		fmt.Printf("<%04x) HMAC:(i)%x (c)%x\r\n", len(b[:n]), hIn, hTmp)
 	}
 
 	return
@@ -331,12 +342,22 @@ func (c Conn) Read(b []byte) (n int, err error) {
 // See go doc io.Writer
 func (c Conn) Write(b []byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
+	//var pLen uint32
+	var hTmp = make([]byte, 1, 1)
+
 	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b)) //EncodeToString(b))
 
 	if c.hmacOn {
+		//pLen = uint32(len(b))
+		//_ = binary.Write(c.c, binary.BigEndian, &pLen)
+
 		c.wm.Write(b)
-		c.byteCount += len(b)
-		fmt.Printf("(%x) HMAC:%x\r\n", c.byteCount, c.wm.Sum(nil))
+		hTmp[0] = c.wm.Sum(nil)[0]
+		_, e := c.c.Write(hTmp)
+		if e != nil {
+			panic(e)
+		}
+		fmt.Printf("  (%04x> HMAC(o):%x\r\n", len(b) /*pLen*/, hTmp)
 	}
 
 	var wb bytes.Buffer
@@ -348,6 +369,10 @@ func (c Conn) Write(b []byte) (n int, err error) {
 		panic(err)
 	}
 	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes())) //EncodeToString(b)) // print only used portion
+
 	n, err = c.c.Write(wb.Bytes())
+	if err != nil {
+		panic(err)
+	}
 	return
 }
