@@ -75,7 +75,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err e
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
 	fmt.Sscanf(u.Gid, "%d", &gid)
-	fmt.Println("uid:", uid, "gid:", gid)
+	log.Println("uid:", uid, "gid:", gid)
 
 	// Need to clear server's env and set key vars of the
 	// target user. This isn't perfect (TERM doesn't seem to
@@ -155,14 +155,14 @@ func main() {
 	}
 	defer l.Close()
 
-	fmt.Println("Serving on", laddr)
+	log.Println("Serving on", laddr)
 	for {
 		// Wait for a connection.
 		conn, err := l.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Accepted client")
+		log.Println("Accepted client")
 
 		// Handle the connection in a new goroutine.
 		// The loop then returns to accepting, so that
@@ -179,7 +179,7 @@ func main() {
 
 			n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
 			if err != nil || n < 4 {
-				fmt.Println("[Bad cmdSpec fmt]")
+				log.Println("[Bad cmdSpec fmt]")
 				return err
 			}
 			//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
@@ -187,27 +187,27 @@ func main() {
 			rec.op = make([]byte, len1, len1)
 			_, err = io.ReadFull(c, rec.op)
 			if err != nil {
-				fmt.Println("[Bad cmdSpec.op]")
+				log.Println("[Bad cmdSpec.op]")
 				return err
 			}
 			rec.who = make([]byte, len2, len2)
 			_, err = io.ReadFull(c, rec.who)
 			if err != nil {
-				fmt.Println("[Bad cmdSpec.who]")
+				log.Println("[Bad cmdSpec.who]")
 				return err
 			}
 
 			rec.cmd = make([]byte, len3, len3)
 			_, err = io.ReadFull(c, rec.cmd)
 			if err != nil {
-				fmt.Println("[Bad cmdSpec.cmd]")
+				log.Println("[Bad cmdSpec.cmd]")
 				return err
 			}
 
 			rec.authCookie = make([]byte, len4, len4)
 			_, err = io.ReadFull(c, rec.authCookie)
 			if err != nil {
-				fmt.Println("[Bad cmdSpec.authCookie]")
+				log.Println("[Bad cmdSpec.authCookie]")
 				return err
 			}
 
@@ -229,19 +229,19 @@ func main() {
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
-				fmt.Println("[Command complete]")
+				log.Println("[Command complete]")
 			} else if rec.op[0] == 's' {
 				log.Println("[Running shell]")
 				runShellAs(string(rec.who), string(rec.cmd), true, conn)
 				// Returned hopefully via an EOF or exit/logout;
 				// Clear current op so user can enter next, or EOF
 				rec.op[0] = 0
-				fmt.Println("[Exiting shell]")
+				log.Println("[Exiting shell]")
 			} else {
 				log.Println("[Bad cmdSpec]")
 			}
 			return
 		}(conn)
 	} //endfor
-	fmt.Println("[Exiting]")
+	log.Println("[Exiting]")
 }

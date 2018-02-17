@@ -25,7 +25,6 @@ package herradurakex
 
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
 
-
 /* This is the core KEx algorithm. For client/server net support code,
 See hkexnet.go for a golang/pkg/net for the compatible Conn interface
 using this to transparently negotiate keys and secure a network channel. */
@@ -148,6 +147,7 @@ func (h *HerraduraKEx) FA() {
 	h.fa = h.fscxRevolve(h.PeerD, h.b, h.intSz-h.pubSz)
 	h.fa.Xor(h.fa, h.a)
 }
+
 // Output HerraduraKEx type value as a string. Implements Stringer interface.
 func (h *HerraduraKEx) String() string {
 	return fmt.Sprintf("s:%d p:%d\na:%s\nb:%s\nd:->%s\n<-PeerD:%s\nfa:%s",

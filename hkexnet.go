@@ -27,10 +27,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
-	"io"
 	"log"
 	"math/big"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -289,25 +289,27 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 //
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
-	log.Printf("[Decrypting...]\n")
+	//log.Printf("[Decrypting...]\r\n")
 
-	//c.c.SetReadDeadline(time.Now().Add(1 * time.Second))
 	n, err = c.c.Read(b)
+	// Normal client 'exit' from interactive session will cause
+	// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 	if err != nil && err.Error() != "EOF" {
-		//if neterr, ok := err.(net.Error); ok {
-		//	fmt.Printf("[Read() timeout - %s]\n", neterr)
-		//} else {
-		//	panic(err)
-		//}
+		if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+			log.Println("unexpected Read() err:", err)
+		} else {
+			log.Println("[Client hung up]")
+		}
 	}
-	log.Printf("  ctext:%+v\n", b[:n]) // print only used portion
+	log.Printf("  <:ctext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n])) // print only used portion
+
 	db := bytes.NewBuffer(b[:n])
 	// The StreamReader acts like a pipe, decrypting
 	// whatever is available and forwarding the result
 	// to the parameter of Read() as a normal io.Reader
 	rs := &cipher.StreamReader{S: c.r, R: db}
 	n, err = rs.Read(b)
-	log.Printf("  ptext:%+v\n", b[:n])
+	log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n]))
 	return
 }
 
@@ -315,8 +317,8 @@ func (c Conn) Read(b []byte) (n int, err error) {
 //
 // See go doc io.Writer
 func (c Conn) Write(b []byte) (n int, err error) {
-	log.Printf("[Encrypting...]\n")
-	log.Printf("  ptext:%+v\n", b)
+	//log.Printf("[Encrypting...]\r\n")
+	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b)) //EncodeToString(b))
 	var wb bytes.Buffer
 	// The StreamWriter acts like a pipe, forwarding whatever is
 	// written to it through the cipher, encrypting as it goes
@@ -325,7 +327,7 @@ func (c Conn) Write(b []byte) (n int, err error) {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("  ctext:%+v\n", wb.Bytes())
+	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes())) //EncodeToString(b)) // print only used portion
 	n, err = c.c.Write(wb.Bytes())
 	return
 }

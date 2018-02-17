@@ -8,6 +8,7 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/hex"
 	"fmt"
 	"hash"
 	"log"
@@ -43,6 +44,7 @@ been negotiated via hkexnet.go
 func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 	var key []byte
 	var block cipher.Block
+	var iv []byte
 	var ivlen int
 	var err error
 
@@ -54,7 +56,7 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 		key = keymat.Bytes()[0:aes.BlockSize]
 		block, err = aes.NewCipher(key)
 		ivlen = aes.BlockSize
-		iv := keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
+		iv = keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher AES_256 (%d)]\n", copts)
 		break
@@ -62,7 +64,7 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 		key = keymat.Bytes()[0:twofish.BlockSize]
 		block, err = twofish.NewCipher(key)
 		ivlen = twofish.BlockSize
-		iv := keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
+		iv = keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
 		break
@@ -79,7 +81,7 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 		//
 		// I assume the other two check bounds and only
 		// copy what's needed whereas blowfish does no such check.
-		iv := keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
+		iv = keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
 		break
@@ -108,6 +110,14 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 	if err != nil {
 		panic(err)
 	}
+
+	// Feed the IV into the hmac: all traffic in the connection must
+	// feed its data into the hmac afterwards, so both ends can xor
+	// that with the stream to detect corruption.
+	_, _ = mc.Write(iv)
+	var currentHash []byte
+	currentHash = mc.Sum(currentHash)
+	log.Printf("Channel init hmac(iv):%s\n", hex.EncodeToString(currentHash))
 
 	return
 }
