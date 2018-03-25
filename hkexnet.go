@@ -27,7 +27,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
-	"io"
 	"log"
 	"math/big"
 	"net"
@@ -129,14 +128,17 @@ func (c *Conn) applyConnExtensions(extensions ...string) {
 //
 //   "H_SHA256"
 func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err error) {
+	// Open raw Conn c
 	c, err := net.Dial(protocol, ipport)
 	if err != nil {
 		return nil, err
 	}
-	hc = &Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, r: nil, w: nil}
-
+	// Init hkexnet.Conn hc over net.Conn c
+	hc = &Conn{c: c, h: New(0, 0)}
 	hc.applyConnExtensions(extensions...)
 
+	// Send hkexnet.Conn parameters to remote side
+	// d is value for Herradura key exchange
 	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
 		hc.cipheropts, hc.opts)
 
@@ -256,6 +258,7 @@ func (hl HKExListener) Addr() net.Addr {
 //
 // See go doc net.Listener.Accept
 func (hl HKExListener) Accept() (hc Conn, err error) {
+	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
 		return Conn{c: nil, h: nil, cipheropts: 0, opts: 0,
@@ -263,8 +266,10 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{c: c, h: New(0, 0), cipheropts: 0, opts: 0, r: nil, w: nil}
+	hc = Conn{c: c, h: New(0, 0)}
 
+	// Read in hkexnet.Conn parameters over raw Conn c
+	// d is value for Herradura key exchange
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
 	if err != nil {
@@ -299,7 +304,8 @@ func (c Conn) Read(b []byte) (n int, err error) {
 	var hIn []byte = make([]byte, 1, 1)
 
 	if c.hmacOn {
-		_, _ = io.ReadFull(c.c, hIn)
+		_ = hIn
+		//_, _ = io.ReadFull(c.c, hIn)
 		//if e != nil {
 		//	panic(e)
 		//}
@@ -324,14 +330,15 @@ func (c Conn) Read(b []byte) (n int, err error) {
 	// to the parameter of Read() as a normal io.Reader
 	rs := &cipher.StreamReader{S: c.r, R: db}
 	// FIXME: Possibly the bug here -- Read() may get grouped writes from
-	// server side, causing loss of hmac sync. -rlm 2018-0-16
+	// server side, causing loss of hmac sync. -rlm 2018-01-16
 	n, err = rs.Read(b)
 	log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n]))
 
+    // Re-calculate hmac, compare with received value
 	if c.hmacOn {
 		c.rm.Write(b[:n])
 		hTmp := c.rm.Sum(nil)[0]
-		fmt.Printf("<%04x) HMAC:(i)%x (c)%x\r\n", len(b[:n]), hIn, hTmp)
+		log.Printf("<%04x) HMAC:(i)%02x (c)%02x\r\n", len(b[:n]), hIn, hTmp)
 	}
 
 	return
@@ -348,16 +355,17 @@ func (c Conn) Write(b []byte) (n int, err error) {
 	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b)) //EncodeToString(b))
 
 	if c.hmacOn {
+		_ = hTmp
 		//pLen = uint32(len(b))
 		//_ = binary.Write(c.c, binary.BigEndian, &pLen)
 
 		c.wm.Write(b)
 		hTmp[0] = c.wm.Sum(nil)[0]
-		_, e := c.c.Write(hTmp)
-		if e != nil {
-			panic(e)
-		}
-		fmt.Printf("  (%04x> HMAC(o):%x\r\n", len(b) /*pLen*/, hTmp)
+		//_, e := c.c.Write(hTmp)
+		//if e != nil {
+		//	panic(e)
+		//}
+		log.Printf("  (%04x> HMAC(o):%02x\r\n", len(b) /*pLen*/, hTmp)
 	}
 
 	var wb bytes.Buffer
