@@ -299,9 +299,9 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
 	//log.Printf("[Decrypting...]\r\n")
-	log.Printf("Read() requests %d bytes\n", len(b))
+	//log.Printf("Read() requests %d bytes\n", len(b))
 	for {
-		log.Printf("c.dBuf.Len(): %d\n", c.dBuf.Len())
+		//log.Printf("c.dBuf.Len(): %d\n", c.dBuf.Len())
 		if c.dBuf.Len() >= 1 /* len(b) */ {
 			break
 		}
@@ -322,10 +322,10 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		if payloadLen > 16384 {
 			panic("Insane payloadLen")
 		}
-		log.Println("payloadLen:", payloadLen)
+		//log.Println("payloadLen:", payloadLen)
 		var payloadBytes = make([]byte, payloadLen)
 		n, err = io.ReadFull(c.c, payloadBytes)
-		log.Print(" << Read ", n, " payloadBytes")
+		//log.Print(" << Read ", n, " payloadBytes")
 
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
@@ -352,16 +352,16 @@ func (c Conn) Read(b []byte) (n int, err error) {
 			panic(err)
 		}
 		c.dBuf.Write(payloadBytes)
-		log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
+		//log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
 
 		// Re-calculate hmac, compare with received value
 		c.rm.Write(payloadBytes)
 		hTmp := c.rm.Sum(nil)[0]
 		log.Printf("<%04x) HMAC:(i)%02x (c)%02x\r\n", decryptN, hmacIn, hTmp)
 	}
-	log.Printf("Read() got %d bytes\n", c.dBuf.Len())
+	//log.Printf("Read() got %d bytes\n", c.dBuf.Len())
 	copy(b, c.dBuf.Next(len(b)))
-	log.Printf("As Read() returns, c.dBuf is %d long: %s\n", c.dBuf.Len(), hex.Dump(c.dBuf.Bytes()))
+	//log.Printf("As Read() returns, c.dBuf is %d long: %s\n", c.dBuf.Len(), hex.Dump(c.dBuf.Bytes()))
 	return len(b), nil
 }
 
