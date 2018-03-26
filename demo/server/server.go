@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"strings"
 	"syscall"
 
 	hkex "blitter.com/hkexsh"
@@ -27,7 +26,8 @@ type cmdSpec struct {
 
 /* -------------------------------------------------------------- */
 
-// Run a command (via os.exec) as a specific user
+/*
+ // Run a command (via os.exec) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
 func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
@@ -66,6 +66,7 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 	}
 	return
 }
+*/
 
 // Run a command (via default shell) as a specific user
 //
@@ -111,8 +112,11 @@ func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err e
 	}
 	// Make sure to close the pty at the end.
 	defer func() { _ = ptmx.Close() }() // Best effort.
-	// Copy stdin to the pty and the pty to stdout.
-	go func() { _, _ = io.Copy(ptmx, conn) }()
+	// Copy stdin to the pty.. (bgnd goroutine)
+	go func() {
+		_, _ = io.Copy(ptmx, conn)
+	}()
+	// ..and the pty to stdout.
 	_, _ = io.Copy(conn, ptmx)
 
 	//err = c.Run()  // returns when c finishes.
@@ -176,10 +180,10 @@ func main() {
 			//passed down to the command handlers.
 			var rec cmdSpec
 			var len1, len2, len3, len4 uint32
-			
+
 			n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
 			log.Printf("cmdSpec read:%d %d %d %d\n", len1, len2, len3, len4)
-			
+
 			if err != nil || n < 4 {
 				log.Println("[Bad cmdSpec fmt]")
 				return err

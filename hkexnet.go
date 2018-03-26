@@ -299,10 +299,10 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
 	//log.Printf("[Decrypting...]\r\n")
-	//log.Printf("Read() requests %d bytes\n", len(b))
+	log.Printf("Read() requests %d bytes\n", len(b))
 	for {
 		//log.Printf("c.dBuf.Len(): %d\n", c.dBuf.Len())
-		if c.dBuf.Len() >= 1 /* len(b) */ {
+		if c.dBuf.Len() > 0 /* len(b) */ {
 			break
 		}
 
@@ -311,13 +311,21 @@ func (c Conn) Read(b []byte) (n int, err error) {
 
 		// Read the hmac LSB and payload len first
 		err = binary.Read(c.c, binary.BigEndian, &hmacIn)
-		if err != nil && err.Error() != "EOF" {
-			panic(err)
+		if err != nil {
+			if err.Error() != "EOF" {
+				log.Println("Error was:", err.Error())
+			} else {
+				return 0, err
+			}
 		}
 
 		err = binary.Read(c.c, binary.BigEndian, &payloadLen)
 		if err != nil {
+			//			if err.Error() != "EOF" {
 			panic(err)
+			//			} else {
+			//				return 0, err
+			//			}
 		}
 		if payloadLen > 16384 {
 			panic("Insane payloadLen")
@@ -359,10 +367,15 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		hTmp := c.rm.Sum(nil)[0]
 		log.Printf("<%04x) HMAC:(i)%02x (c)%02x\r\n", decryptN, hmacIn, hTmp)
 	}
-	//log.Printf("Read() got %d bytes\n", c.dBuf.Len())
-	copy(b, c.dBuf.Next(len(b)))
+	retN := c.dBuf.Len()
+	if retN > len(b) {
+		retN = len(b)
+	}
+
+	log.Printf("Read() got %d bytes\n", retN)
+	copy(b, c.dBuf.Next(retN))
 	//log.Printf("As Read() returns, c.dBuf is %d long: %s\n", c.dBuf.Len(), hex.Dump(c.dBuf.Bytes()))
-	return len(b), nil
+	return retN, nil
 }
 
 // Write a byte slice
