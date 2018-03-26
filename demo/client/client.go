@@ -128,9 +128,7 @@ func main() {
 	_, err = conn.Write(rec.who)
 	_, err = conn.Write(rec.cmd)
 	_, err = conn.Write(rec.authCookie)
-	
-	conn.EnableHMAC()
-	
+
 	//client reader (from server) goroutine
 	wg.Add(1)
 	go func() {
@@ -153,6 +151,7 @@ func main() {
 				os.Exit(1)
 			}
 		}
+
 		if isInteractive {
 			log.Println("[Got EOF]")
 			wg.Done() // server hung up, close WaitGroup to exit client

@@ -24,9 +24,11 @@ package herradurakex
 import (
 	"bytes"
 	"crypto/cipher"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"hash"
+	"io"
 	"log"
 	"math/big"
 	"net"
@@ -40,17 +42,13 @@ import (
 type Conn struct {
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
-	hmacOn     bool          // turned on once channel param negotiation is done
 	cipheropts uint32        // post-KEx cipher/hmac options
 	opts       uint32        // post-KEx protocol options (caller-defined)
 	r          cipher.Stream //read cipherStream
 	rm         hash.Hash
 	w          cipher.Stream //write cipherStream
 	wm         hash.Hash
-}
-
-func (c *Conn) EnableHMAC() {
-	c.hmacOn = true
+	dBuf       *bytes.Buffer //decrypt buffer for Read()
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -134,7 +132,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
-	hc = &Conn{c: c, h: New(0, 0)}
+	hc = &Conn{c: c, h: New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// Send hkexnet.Conn parameters to remote side
@@ -266,7 +264,7 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{c: c, h: New(0, 0)}
+	hc = Conn{c: c, h: New(0, 0), dBuf: new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
@@ -301,47 +299,70 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
 	//log.Printf("[Decrypting...]\r\n")
-	var hIn []byte = make([]byte, 1, 1)
-
-	if c.hmacOn {
-		_ = hIn
-		//_, _ = io.ReadFull(c.c, hIn)
-		//if e != nil {
-		//	panic(e)
-		//}
-	}
-	n, err = c.c.Read(b)
-
-	// Normal client 'exit' from interactive session will cause
-	// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
-	if err != nil && err.Error() != "EOF" {
-		if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-			log.Println("unexpected Read() err:", err)
-		} else {
-			log.Println("[Client hung up]")
+	log.Printf("Read() requests %d bytes\n", len(b))
+	for {
+		log.Printf("c.dBuf.Len(): %d\n", c.dBuf.Len())
+		if c.dBuf.Len() >= 1 /* len(b) */ {
+			break
 		}
-	}
 
-	log.Printf("  <:ctext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n])) // print only used portion
+		var hmacIn uint8
+		var payloadLen uint32
 
-	db := bytes.NewBuffer(b[:n])
-	// The StreamReader acts like a pipe, decrypting
-	// whatever is available and forwarding the result
-	// to the parameter of Read() as a normal io.Reader
-	rs := &cipher.StreamReader{S: c.r, R: db}
-	// FIXME: Possibly the bug here -- Read() may get grouped writes from
-	// server side, causing loss of hmac sync. -rlm 2018-01-16
-	n, err = rs.Read(b)
-	log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(b[:n])) //EncodeToString(b[:n]))
+		// Read the hmac LSB and payload len first
+		err = binary.Read(c.c, binary.BigEndian, &hmacIn)
+		if err != nil && err.Error() != "EOF" {
+			panic(err)
+		}
 
-    // Re-calculate hmac, compare with received value
-	if c.hmacOn {
-		c.rm.Write(b[:n])
+		err = binary.Read(c.c, binary.BigEndian, &payloadLen)
+		if err != nil {
+			panic(err)
+		}
+		if payloadLen > 16384 {
+			panic("Insane payloadLen")
+		}
+		log.Println("payloadLen:", payloadLen)
+		var payloadBytes = make([]byte, payloadLen)
+		n, err = io.ReadFull(c.c, payloadBytes)
+		log.Print(" << Read ", n, " payloadBytes")
+
+		// Normal client 'exit' from interactive session will cause
+		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
+		if err != nil && err.Error() != "EOF" {
+			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+				log.Println("unexpected Read() err:", err)
+			} else {
+				log.Println("[Client hung up]")
+			}
+		}
+
+		log.Printf("  <:ctext:\r\n%s\r\n", hex.Dump(payloadBytes[:n])) //EncodeToString(b[:n])) // print only used portion
+
+		db := bytes.NewBuffer(payloadBytes[:n]) //copying payloadBytes to db
+		// The StreamReader acts like a pipe, decrypting
+		// whatever is available and forwarding the result
+		// to the parameter of Read() as a normal io.Reader
+		rs := &cipher.StreamReader{S: c.r, R: db}
+		// The caller isn't necessarily reading the full payload so we need
+		// to decrypt ot an intermediate buffer, draining it on demand of caller
+		decryptN, err := rs.Read(payloadBytes)
+		log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(payloadBytes[:n])) //EncodeToString(b[:n]))
+		if err != nil {
+			panic(err)
+		}
+		c.dBuf.Write(payloadBytes)
+		log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
+
+		// Re-calculate hmac, compare with received value
+		c.rm.Write(payloadBytes)
 		hTmp := c.rm.Sum(nil)[0]
-		log.Printf("<%04x) HMAC:(i)%02x (c)%02x\r\n", len(b[:n]), hIn, hTmp)
+		log.Printf("<%04x) HMAC:(i)%02x (c)%02x\r\n", decryptN, hmacIn, hTmp)
 	}
-
-	return
+	log.Printf("Read() got %d bytes\n", c.dBuf.Len())
+	copy(b, c.dBuf.Next(len(b)))
+	log.Printf("As Read() returns, c.dBuf is %d long: %s\n", c.dBuf.Len(), hex.Dump(c.dBuf.Bytes()))
+	return len(b), nil
 }
 
 // Write a byte slice
@@ -349,24 +370,18 @@ func (c Conn) Read(b []byte) (n int, err error) {
 // See go doc io.Writer
 func (c Conn) Write(b []byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
-	//var pLen uint32
-	var hTmp = make([]byte, 1, 1)
+	var hmacOut uint8
+	var payloadLen uint32
 
 	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b)) //EncodeToString(b))
 
-	if c.hmacOn {
-		_ = hTmp
-		//pLen = uint32(len(b))
-		//_ = binary.Write(c.c, binary.BigEndian, &pLen)
+	payloadLen = uint32(len(b))
 
-		c.wm.Write(b)
-		hTmp[0] = c.wm.Sum(nil)[0]
-		//_, e := c.c.Write(hTmp)
-		//if e != nil {
-		//	panic(e)
-		//}
-		log.Printf("  (%04x> HMAC(o):%02x\r\n", len(b) /*pLen*/, hTmp)
-	}
+	// Calculate hmac on payload
+	c.wm.Write(b)
+	hmacOut = uint8(c.wm.Sum(nil)[0])
+
+	log.Printf("  (%04x> HMAC(o):%02x\r\n", payloadLen, hmacOut)
 
 	var wb bytes.Buffer
 	// The StreamWriter acts like a pipe, forwarding whatever is
@@ -376,7 +391,11 @@ func (c Conn) Write(b []byte) (n int, err error) {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes())) //EncodeToString(b)) // print only used portion
+	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
+
+	// Write hmac LSB, payloadLen followed by payload
+	_ = binary.Write(c.c, binary.BigEndian, hmacOut)
+	_ = binary.Write(c.c, binary.BigEndian, payloadLen)
 
 	n, err = c.c.Write(wb.Bytes())
 	if err != nil {

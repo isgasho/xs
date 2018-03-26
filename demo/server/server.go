@@ -176,8 +176,10 @@ func main() {
 			//passed down to the command handlers.
 			var rec cmdSpec
 			var len1, len2, len3, len4 uint32
-
+			
 			n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
+			log.Printf("cmdSpec read:%d %d %d %d\n", len1, len2, len3, len4)
+			
 			if err != nil || n < 4 {
 				log.Println("[Bad cmdSpec fmt]")
 				return err
@@ -210,9 +212,7 @@ func main() {
 				log.Println("[Bad cmdSpec.authCookie]")
 				return err
 			}
-			
-			conn.EnableHMAC()
-			
+
 			log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
 				rec.op[0], string(rec.who), string(rec.cmd))
 
