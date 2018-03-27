@@ -121,9 +121,9 @@ func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err e
 
 	//err = c.Run()  // returns when c finishes.
 
+	log.Printf("[%s]\n", cmd)
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
-		log.Printf("[%s]\n", cmd)
 	}
 	return
 }

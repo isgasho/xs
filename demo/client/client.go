@@ -168,6 +168,7 @@ func main() {
 			// exit with outerr == nil
 			_, outerr := io.Copy(conn, os.Stdin)
 			if outerr != nil {
+				log.Println(outerr)
 				if outerr.Error() != "EOF" {
 					fmt.Println(outerr)
 					os.Exit(2)

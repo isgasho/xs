@@ -314,13 +314,13 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		err = binary.Read(c.c, binary.BigEndian, &hmacIn)
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
-		if err != nil && err.Error() != "EOF" {
+		if err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
 				log.Println("unexpected Read() err:", err)
 			} else {
 				log.Println("[Client hung up]")
-				return 0, io.EOF
 			}
+			return 0, err
 		}
 
 		//if err != nil {
@@ -424,7 +424,8 @@ func (c Conn) Write(b []byte) (n int, err error) {
 
 	n, err = c.c.Write(wb.Bytes())
 	if err != nil {
-		panic(err)
+		//panic(err)
+		log.Println(err)
 	}
 	return
 }
