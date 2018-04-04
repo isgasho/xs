@@ -11,8 +11,8 @@ import (
 	"os/user"
 	"syscall"
 
-	hkex "blitter.com/hkexsh"
-	"blitter.com/hkexsh/demo/spinsult"
+	hkexsh "blitter.com/hkexsh"
+	"blitter.com/hkexsh/spinsult"
 	"github.com/kr/pty"
 )
 
@@ -71,7 +71,7 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who string, cmd string, interactive bool, conn hkex.Conn) (err error) {
+func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err error) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -153,7 +153,7 @@ func main() {
 
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
-	l, err := hkex.Listen("tcp", laddr)
+	l, err := hkexsh.Listen("tcp", laddr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func main() {
 		// Handle the connection in a new goroutine.
 		// The loop then returns to accepting, so that
 		// multiple connections may be served concurrently.
-		go func(c hkex.Conn) (e error) {
+		go func(c hkexsh.Conn) (e error) {
 			defer c.Close()
 
 			//We use io.ReadFull() here to guarantee we consume
@@ -220,7 +220,7 @@ func main() {
 			log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
 				rec.op[0], string(rec.who), string(rec.cmd))
 
-			valid, allowedCmds := hkex.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
+			valid, allowedCmds := hkexsh.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
 			if !valid {
 				log.Println("Invalid user", string(rec.who))
 				c.Write([]byte(rejectUserMsg()))

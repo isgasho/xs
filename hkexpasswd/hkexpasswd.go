@@ -12,8 +12,8 @@ import (
 	"os"
 	"os/user"
 
-	hkex "github.com/Russtopia/herradurakex"
 	"github.com/jameskeane/bcrypt"
+	hkexsh "blitter.com/hkexsh"
 )
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 	uname = u.Username
 
 	fmt.Printf("New Password:")
-	ab, err := hkex.ReadPassword(int(os.Stdin.Fd()))
+	ab, err := hkexsh.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Printf("\r\n")
 	if err != nil {
 		log.Fatal(err)
@@ -49,7 +49,7 @@ func main() {
 	newpw = string(ab)
 
 	fmt.Printf("Confirm:")
-	ab, err = hkex.ReadPassword(int(os.Stdin.Fd()))
+	ab, err = hkexsh.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Printf("\r\n")
 	if err != nil {
 		log.Fatal(err)

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	hkex "blitter.com/hkexsh"
+	hkexsh "blitter.com/hkexsh"
 	isatty "github.com/mattn/go-isatty"
 )
 
@@ -62,7 +62,7 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	conn, err := hkex.Dial("tcp", server, cAlg, hAlg)
+	conn, err := hkexsh.Dial("tcp", server, cAlg, hAlg)
 	if err != nil {
 		fmt.Println("Err!")
 		panic(err)
@@ -74,11 +74,11 @@ func main() {
 	// TODO: send flag to server side indicating this
 	//  affects shell command used
 	if isatty.IsTerminal(os.Stdin.Fd()) {
-		oldState, err := hkex.MakeRaw(int(os.Stdin.Fd()))
+		oldState, err := hkexsh.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			panic(err)
 		}
-		defer func() { _ = hkex.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
+		defer func() { _ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 	} else {
 		log.Println("NOT A TTY")
 	}
@@ -108,7 +108,7 @@ func main() {
 
 	if len(authCookie) == 0 {
 		fmt.Printf("Gimme cookie:")
-		ab, err := hkex.ReadPassword(int(os.Stdin.Fd()))
+		ab, err := hkexsh.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Printf("\r\n")
 		if err != nil {
 			panic(err)

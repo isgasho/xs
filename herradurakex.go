@@ -1,11 +1,16 @@
-// Package herradurakex - socket lib conforming to
+// Package hkexsh - socket lib conforming to
 // golang.org/pkg/net Conn interface, with
 // experimental key exchange algorithm by
-// Omar Alejandro Herrera Reyna
+// Omar Alejandro Herrera Reyna.
+//
 // (https://github.com/Caume/HerraduraKEx)
 //
+// Demonstration server (hkexshd) and
+// client (hkexsh)
+
+//
 // See README.md for full license info.
-package herradurakex
+package hkexsh
 
 /*  Herradura - a Key exchange scheme in the style of Diffie-Hellman Key Exchange.
     Copyright (C) 2017 Omar Alejandro Herrera Reyna
@@ -22,7 +27,7 @@ package herradurakex
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
+    
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
 
 /* This is the core KEx algorithm. For client/server net support code,

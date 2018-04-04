@@ -16,7 +16,7 @@
 
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
 
-package herradurakex
+package hkexsh
 
 // Implementation of HKEx-wrapped versions of the golang standard
 // net package interfaces, allowing clients and servers to simply replace

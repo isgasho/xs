@@ -1,4 +1,4 @@
-package herradurakex
+package hkexsh
 
 /* Support functions to set up encryption once an HKEx Conn has been
 established with FA exchange and support channel operations
@@ -37,7 +37,6 @@ const (
 	HmacNoneDisallowed
 )
 
-/*TODO: HMAC derived from HKEx FA.*/
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
