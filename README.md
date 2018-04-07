@@ -1,10 +1,15 @@
 HKExSh
 --
 
-'hkexsh' (HerraduraKEx shell) is a golang implementation of drop-in replacements for golang's
-standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept() and the net.Conn type),
-which automatically negotiate keying material for 'secure' sockets using the experimental
-HerraduraKEx key exchange algorithm first released at [Omar Elejandro Herrera Reyna's HerraduraKEx project](http://github.com/Caume/HerraduraKEx).
+'hkexsh' (HerraduraKEx shell) is a golang implementation of a simple
+remote shell client and server, similar in role to ssh, offering
+encrypted interactive and non-interactive sessions. The client and server
+programs (hkexsh and hkexshd) use a mostly drop-in replacement for golang's
+standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept()
+and the net.Conn type), which automatically negotiate keying material for
+'secure' sockets using the experimental HerraduraKEx key exchange algorithm
+first released at
+[Omar Elejandro Herrera Reyna's HerraduraKEx project](http://github.com/Caume/HerraduraKEx).
 
 One can simply replace calls to net.Dial() with hkex.Dial(), and likewise
 net.Listen() with hkex.Listen(), to obtain connections (hkex.Conn) conforming
@@ -12,23 +17,27 @@ to the basic net.Conn interface. Upon Dial(), the HerraduraKEx key exchange
 is initiated (whereby client and server independently derive the same
 keying material).
 
-Above this layer, demo apps in this repository (demo/server/server.go and demo/client/client.go)
-then negotiate session settings (cipher/hmac algorithms, etc.) to be used for further communication.
+Above the hkex.Conn layer, the server and client apps in this repository
+(server/hkexshd and client/hkexsh) negotiate session settings (cipher/hmac
+algorithms, interactive/non-interactive, etc.) to be used for further
+communication.
 
 NOTE: Due to the experimental nature of the HerraduraKEx algorithm used to
-derive crypto keying material on each end, this algorithm and the
-demonstration remote shell client/server programs should be used with caution.
-As of this time (Jan 2018) no verdict by acknowledged 'crypto experts' as to
-the level of security of the HerraduraKEx algorithm for purposes of session key
-exchange over an insecure channel has been rendered.
-It is hoped that such experts in the field will analyze the algorithm and
-determine if it is indeed a suitable one for use in situations where
-Diffie-Hellman and other key exchange algorithms are currently utilized.
+derive crypto keying material, this algorithm and the demonstration remote
+shell client/server programs should be used with caution and should definitely
+NOT be used for any sensitive applications, or at the very least at one's
+own risk.
 
-Within the demo/ tree are client and servers implementing a simplified,
-ssh-like secure shell facility and a password-setting utility using its
-own user/password file separate from the system /etc/passwd, which is
-used by the server to authenticate clients.
+As of this time (Jan 2018) no verdict by acknowledged 'crypto experts' as to
+the level of security of the HerraduraKEx algorithm for purposes of session
+key exchange over an insecure channel has been rendered.
+It is hoped that experts in the field will analyze the algorithm and
+determine if it is indeed a suitable one for use in situations where
+Diffie-Hellman or other key exchange algorithms are currently utilized.
+
+Finally, within the hkexpasswd/ directory is a password-setting utility
+using its own user/password file distinct from the system /etc/passwd, which
+is used by the hkexshd server to authenticate clients.
 
 Dependencies:
 --
@@ -45,18 +54,15 @@ Get source code
 To build
 --
 * $ cd $GOPATH/src/github.com/Russtopia/hkexsh
-* $ go install .
-* $ go build demo/client/client.go && go build demo/server/server.go
-* $ go build demo/hkexpasswd/hkexpasswd.go
+* $ make clean all
 
 To set accounts & passwords:
 --
 * $ sudo echo "joebloggs:*:*:*" >/etc/hkexsh.passwd
-* $ sudo ./hkexpasswd -u joebloggs
+* $ sudo hkexpasswd/hkexpasswd -u joebloggs
 * $ <enter a password, enter again to confirm>
 
 Running Clent and Server. In separate shells:
 --
-* [A]$ sudo ./server &
-* [B]$ ./client -u joebloggs
-
+* [A]$ sudo hkexshd/hkexshd &
+* [B]$ hkexsh/hkexsh -u joebloggs

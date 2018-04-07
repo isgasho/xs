@@ -5,11 +5,16 @@
 //
 // (https://github.com/Caume/HerraduraKEx)
 //
-// Demonstration server (hkexshd) and
-// client (hkexsh)
-
+// The core HerraduraKEx algorithm is dual-licensed
+// by the author (Omar Alejandro Herrera Reyna)
+// under GPL3 and MIT licenses.
+// See LICENSE.gpl and LICENSE.mit in this distribution
 //
-// See README.md for full license info.
+// Copyright (c) 2017-2018 Russell Magee
+// Licensed under the terms of the MIT license (see LICENSE.mit in this
+// distribution)
+//
+// golang implementation by Russ Magee (rmagee_at_gmail.com)
 package hkexsh
 
 /*  Herradura - a Key exchange scheme in the style of Diffie-Hellman Key Exchange.
@@ -27,7 +32,7 @@ package hkexsh
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
-    
+
     golang implementation by Russ Magee (rmagee_at_gmail.com) */
 
 /* This is the core KEx algorithm. For client/server net support code,

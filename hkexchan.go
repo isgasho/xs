@@ -1,5 +1,11 @@
 package hkexsh
 
+// Copyright (c) 2017-2018 Russell Magee
+// Licensed under the terms of the MIT license (see LICENSE.mit in this
+// distribution)
+//
+// golang implementation by Russ Magee (rmagee_at_gmail.com)
+
 /* Support functions to set up encryption once an HKEx Conn has been
 established with FA exchange and support channel operations
 (echo, file-copy, remote-cmd, ...) */

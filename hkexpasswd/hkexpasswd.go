@@ -1,5 +1,11 @@
 // Util to generate/store passwords for users in a file akin to /etc/passwd
 // suitable for the demo hkexsh server, using bcrypt.
+//
+// Copyright (c) 2017-2018 Russell Magee
+// Licensed under the terms of the MIT license (see LICENSE.mit in this
+// distribution)
+//
+// golang implementation by Russ Magee (rmagee_at_gmail.com)
 package main
 
 import (
