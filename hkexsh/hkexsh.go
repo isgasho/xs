@@ -80,8 +80,9 @@ func main() {
 	// Set stdin in raw mode if it's an interactive session
 	// TODO: send flag to server side indicating this
 	//  affects shell command used
+	var oldState *hkexsh.State
 	if isatty.IsTerminal(os.Stdin.Fd()) {
-		oldState, err := hkexsh.MakeRaw(int(os.Stdin.Fd()))
+		oldState, err = hkexsh.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			panic(err)
 		}
@@ -155,6 +156,7 @@ func main() {
 		if inerr != nil {
 			if inerr.Error() != "EOF" {
 				fmt.Println(inerr)
+				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 				os.Exit(1)
 			}
 		}
@@ -178,6 +180,7 @@ func main() {
 				log.Println(outerr)
 				if outerr.Error() != "EOF" {
 					fmt.Println(outerr)
+					_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 					os.Exit(2)
 				}
 			}
