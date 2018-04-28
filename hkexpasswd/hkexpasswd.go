@@ -19,7 +19,7 @@ import (
 	"os/user"
 
 	"github.com/jameskeane/bcrypt"
-	hkexsh "blitter.com/hkexsh"
+	hkexsh "blitter.com/go/hkexsh"
 )
 
 func main() {

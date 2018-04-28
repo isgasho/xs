@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 
-	hkexsh "blitter.com/hkexsh"
+	hkexsh "blitter.com/go/hkexsh"
 	isatty "github.com/mattn/go-isatty"
 )
 

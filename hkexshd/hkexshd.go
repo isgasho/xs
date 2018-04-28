@@ -18,8 +18,8 @@ import (
 	"os/user"
 	"syscall"
 
-	hkexsh "blitter.com/hkexsh"
-	"blitter.com/hkexsh/spinsult"
+	hkexsh "blitter.com/go/hkexsh"
+	"blitter.com/go/hkexsh/spinsult"
 	"github.com/kr/pty"
 )
 
@@ -171,90 +171,93 @@ func main() {
 		// Wait for a connection.
 		conn, err := l.Accept()
 		if err != nil {
-			log.Fatal(err)
-		}
-		log.Println("Accepted client")
+				log.Printf("Accept() got error(%v), hanging up.\n", err)
+				conn.Close()
+			//log.Fatal(err)
+		} else {
+			log.Println("Accepted client")
 
-		// Handle the connection in a new goroutine.
-		// The loop then returns to accepting, so that
-		// multiple connections may be served concurrently.
-		go func(c hkexsh.Conn) (e error) {
-			defer c.Close()
+			// Handle the connection in a new goroutine.
+			// The loop then returns to accepting, so that
+			// multiple connections may be served concurrently.
+			go func(c hkexsh.Conn) (e error) {
+				defer c.Close()
 
-			//We use io.ReadFull() here to guarantee we consume
-			//just the data we want for the cmdSpec, and no more.
-			//Otherwise data will be sitting in the channel that isn't
-			//passed down to the command handlers.
-			var rec cmdSpec
-			var len1, len2, len3, len4 uint32
+				//We use io.ReadFull() here to guarantee we consume
+				//just the data we want for the cmdSpec, and no more.
+				//Otherwise data will be sitting in the channel that isn't
+				//passed down to the command handlers.
+				var rec cmdSpec
+				var len1, len2, len3, len4 uint32
 
-			n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
-			log.Printf("cmdSpec read:%d %d %d %d\n", len1, len2, len3, len4)
+				n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
+				log.Printf("cmdSpec read:%d %d %d %d\n", len1, len2, len3, len4)
 
-			if err != nil || n < 4 {
-				log.Println("[Bad cmdSpec fmt]")
-				return err
-			}
-			//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
+				if err != nil || n < 4 {
+					log.Println("[Bad cmdSpec fmt]")
+					return err
+				}
+				//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
 
-			rec.op = make([]byte, len1, len1)
-			_, err = io.ReadFull(c, rec.op)
-			if err != nil {
-				log.Println("[Bad cmdSpec.op]")
-				return err
-			}
-			rec.who = make([]byte, len2, len2)
-			_, err = io.ReadFull(c, rec.who)
-			if err != nil {
-				log.Println("[Bad cmdSpec.who]")
-				return err
-			}
+				rec.op = make([]byte, len1, len1)
+				_, err = io.ReadFull(c, rec.op)
+				if err != nil {
+					log.Println("[Bad cmdSpec.op]")
+					return err
+				}
+				rec.who = make([]byte, len2, len2)
+				_, err = io.ReadFull(c, rec.who)
+				if err != nil {
+					log.Println("[Bad cmdSpec.who]")
+					return err
+				}
 
-			rec.cmd = make([]byte, len3, len3)
-			_, err = io.ReadFull(c, rec.cmd)
-			if err != nil {
-				log.Println("[Bad cmdSpec.cmd]")
-				return err
-			}
+				rec.cmd = make([]byte, len3, len3)
+				_, err = io.ReadFull(c, rec.cmd)
+				if err != nil {
+					log.Println("[Bad cmdSpec.cmd]")
+					return err
+				}
 
-			rec.authCookie = make([]byte, len4, len4)
-			_, err = io.ReadFull(c, rec.authCookie)
-			if err != nil {
-				log.Println("[Bad cmdSpec.authCookie]")
-				return err
-			}
+				rec.authCookie = make([]byte, len4, len4)
+				_, err = io.ReadFull(c, rec.authCookie)
+				if err != nil {
+					log.Println("[Bad cmdSpec.authCookie]")
+					return err
+				}
 
-			log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
-				rec.op[0], string(rec.who), string(rec.cmd))
+				log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
+					rec.op[0], string(rec.who), string(rec.cmd))
 
-			valid, allowedCmds := hkexsh.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
-			if !valid {
-				log.Println("Invalid user", string(rec.who))
-				c.Write([]byte(rejectUserMsg()))
+				valid, allowedCmds := hkexsh.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
+				if !valid {
+					log.Println("Invalid user", string(rec.who))
+					c.Write([]byte(rejectUserMsg()))
+					return
+				}
+				log.Printf("[allowedCmds:%s]\n", allowedCmds)
+
+				if rec.op[0] == 'c' {
+					// Non-interactive command
+					log.Println("[Running command]")
+					runShellAs(string(rec.who), string(rec.cmd), false, conn)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.op[0] = 0
+					log.Println("[Command complete]")
+				} else if rec.op[0] == 's' {
+					log.Println("[Running shell]")
+					runShellAs(string(rec.who), string(rec.cmd), true, conn)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.op[0] = 0
+					log.Println("[Exiting shell]")
+				} else {
+					log.Println("[Bad cmdSpec]")
+				}
 				return
-			}
-			log.Printf("[allowedCmds:%s]\n", allowedCmds)
-
-			if rec.op[0] == 'c' {
-				// Non-interactive command
-				log.Println("[Running command]")
-				runShellAs(string(rec.who), string(rec.cmd), false, conn)
-				// Returned hopefully via an EOF or exit/logout;
-				// Clear current op so user can enter next, or EOF
-				rec.op[0] = 0
-				log.Println("[Command complete]")
-			} else if rec.op[0] == 's' {
-				log.Println("[Running shell]")
-				runShellAs(string(rec.who), string(rec.cmd), true, conn)
-				// Returned hopefully via an EOF or exit/logout;
-				// Clear current op so user can enter next, or EOF
-				rec.op[0] = 0
-				log.Println("[Exiting shell]")
-			} else {
-				log.Println("[Bad cmdSpec]")
-			}
-			return
-		}(conn)
+			}(conn)
+		} // Accept() success
 	} //endfor
 	log.Println("[Exiting]")
 }

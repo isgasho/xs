@@ -28,6 +28,12 @@ import (
 	"time"
 )
 
+const (
+	csoNone        = iota // No error, normal packet
+	csoHmacInvalid        // HMAC mismatch detect on remote end
+	csoChaff              // This packet is a dummy, do not process beyond decryption
+)
+
 /*---------------------------------------------------------------------*/
 
 // Conn is a HKex connection - a drop-in replacement for net.Conn
@@ -149,8 +155,8 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	hc.h.FA()
 	log.Printf("**(c)** FA:%s\n", hc.h.fa)
 
-	hc.r, hc.rm = hc.getStream(hc.h.fa)
-	hc.w, hc.wm = hc.getStream(hc.h.fa)
+	hc.r, hc.rm, err = hc.getStream(hc.h.fa)
+	hc.w, hc.wm, err = hc.getStream(hc.h.fa)
 	return
 }
 
@@ -262,11 +268,13 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	// d is value for Herradura key exchange
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
+	log.Printf("[Got d:%v]", d)
 	if err != nil {
 		return hc, err
 	}
 	_, err = fmt.Fscanf(c, "%08x:%08x\n",
 		&hc.cipheropts, &hc.opts)
+	log.Printf("[Got cipheropts, opts:%v, %v]", hc.cipheropts, hc.opts)
 	if err != nil {
 		return hc, err
 	}
@@ -279,8 +287,8 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
 		hc.cipheropts, hc.opts)
 
-	hc.r, hc.rm = hc.getStream(hc.h.fa)
-	hc.w, hc.wm = hc.getStream(hc.h.fa)
+	hc.r, hc.rm, err = hc.getStream(hc.h.fa)
+	hc.w, hc.wm, err = hc.getStream(hc.h.fa)
 	return
 }
 
@@ -303,9 +311,9 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		var hmacIn [4]uint8
 		var payloadLen uint32
 
-		// Read ctrl/status opcode (for now, set nonzero on hmac mismatch)
+		// Read ctrl/status opcode (csoHmacInvalid on hmac mismatch)
 		err = binary.Read(c.c, binary.BigEndian, &ctrlStatOp)
-		if ctrlStatOp != 0 {
+		if ctrlStatOp == csoHmacInvalid {
 			// Other side indicated channel tampering, close channel
 			c.Close()
 			return 1, errors.New("** ALERT - remote end detected HMAC mismatch - possible channel tampering **")
@@ -328,14 +336,19 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		if err != nil {
 			if err.Error() != "EOF" {
 				panic(err)
-			} // else {
-			//	return 0, err
-			//}
+				// Cannot just return 0, err here - client won't hang up properly
+				// when 'exit' from shell. TODO: try server sending ctrlStatOp to
+				// indicate to Reader? -rlm 20180428
+			}
 		}
+
 		if payloadLen > 16384 {
-			panic("Insane payloadLen")
+			log.Printf("[Insane payloadLen:%v]\n", payloadLen)
+			c.Close()
+			return 1, errors.New("Insane payloadLen")
 		}
 		//log.Println("payloadLen:", payloadLen)
+
 		var payloadBytes = make([]byte, payloadLen)
 		n, err = io.ReadFull(c.c, payloadBytes)
 		//log.Print(" << Read ", n, " payloadBytes")
@@ -364,8 +377,14 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		if err != nil {
 			panic(err)
 		}
-		c.dBuf.Write(payloadBytes)
-		//log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
+
+		// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
+		if ctrlStatOp == csoChaff {
+			log.Printf("[Chaff pkt]\n")
+		} else {
+			c.dBuf.Write(payloadBytes)
+			//log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
+		}
 
 		// Re-calculate hmac, compare with received value
 		c.rm.Write(payloadBytes)
@@ -374,10 +393,11 @@ func (c Conn) Read(b []byte) (n int, err error) {
 
 		// Log alert if hmac didn't match, corrupted channel
 		if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
-			fmt.Println("** ALERT - hmac mismatch, possible channel tampering **")
-			_, _ = c.c.Write([]byte{0x1})
+			fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
+			_, _ = c.c.Write([]byte{csoHmacInvalid})
 		}
 	}
+
 	retN := c.dBuf.Len()
 	if retN > len(b) {
 		retN = len(b)
@@ -416,11 +436,11 @@ func (c Conn) Write(b []byte) (n int, err error) {
 		panic(err)
 	}
 	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
-	
+
 	var ctrlStatOp byte
-	ctrlStatOp = 0x00
+	ctrlStatOp = csoNone
 	_ = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
-	
+
 	// Write hmac LSB, payloadLen followed by payload
 	_ = binary.Write(c.c, binary.BigEndian, hmacOut)
 	_ = binary.Write(c.c, binary.BigEndian, payloadLen)

@@ -15,11 +15,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"log"
 	"math/big"
-	"os"
 
 	"golang.org/x/crypto/blowfish"
 	"golang.org/x/crypto/twofish"
@@ -46,12 +46,11 @@ const (
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
-func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
+func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash, err error) {
 	var key []byte
 	var block cipher.Block
 	var iv []byte
 	var ivlen int
-	var err error
 
 	copts := hc.cipheropts & 0xFF
 	// TODO: each cipher alg case should ensure len(keymat.Bytes())
@@ -93,7 +92,8 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 	default:
 		log.Printf("[invalid cipher (%d)]\n", copts)
 		fmt.Printf("DOOFUS SET A VALID CIPHER ALG (%d)\n", copts)
-		os.Exit(1)
+		err = errors.New("hkexchan: INVALID CIPHER ALG")
+		//os.Exit(1)
 	}
 
 	hopts := (hc.cipheropts >> 8) & 0xFF
@@ -109,20 +109,19 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash) {
 	default:
 		log.Printf("[invalid hmac (%d)]\n", hopts)
 		fmt.Printf("DOOFUS SET A VALID HMAC ALG (%d)\n", hopts)
-		os.Exit(1)
+		err = errors.New("hkexchan: INVALID HMAC ALG")
+		return
+		//os.Exit(1)
 	}
 
 	if err != nil {
-		panic(err)
+		// Feed the IV into the hmac: all traffic in the connection must
+		// feed its data into the hmac afterwards, so both ends can xor
+		// that with the stream to detect corruption.
+		_, _ = mc.Write(iv)
+		var currentHash []byte
+		currentHash = mc.Sum(currentHash)
+		log.Printf("Channel init hmac(iv):%s\n", hex.EncodeToString(currentHash))
 	}
-
-	// Feed the IV into the hmac: all traffic in the connection must
-	// feed its data into the hmac afterwards, so both ends can xor
-	// that with the stream to detect corruption.
-	_, _ = mc.Write(iv)
-	var currentHash []byte
-	currentHash = mc.Sum(currentHash)
-	log.Printf("Channel init hmac(iv):%s\n", hex.EncodeToString(currentHash))
-
 	return
 }
