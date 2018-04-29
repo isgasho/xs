@@ -29,19 +29,28 @@ import (
 )
 
 const (
-	csoNone        = iota // No error, normal packet
-	csoHmacInvalid        // HMAC mismatch detect on remote end
-	csoChaff              // This packet is a dummy, do not process beyond decryption
+	CSONone        = iota // No error, normal packet
+	CSOHmacInvalid        // HMAC mismatch detected on remote end
+	CSOTermSize           // set term size (rows:cols)
+	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
 
 /*---------------------------------------------------------------------*/
+
+type WinSize struct {
+	Rows uint16
+	Cols uint16
+}
 
 // Conn is a HKex connection - a drop-in replacement for net.Conn
 type Conn struct {
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
-	cipheropts uint32        // post-KEx cipher/hmac options
-	opts       uint32        // post-KEx protocol options (caller-defined)
+	cipheropts uint32 // post-KEx cipher/hmac options
+	opts       uint32 // post-KEx protocol options (caller-defined)
+	WinCh      chan WinSize
+	Rows       uint16
+	Cols       uint16
 	r          cipher.Stream //read cipherStream
 	rm         hash.Hash
 	w          cipher.Stream //write cipherStream
@@ -262,7 +271,8 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{c: c, h: New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = Conn{c: c, h: New(0, 0), WinCh: make(chan WinSize, 1),
+		dBuf: new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
@@ -311,9 +321,10 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		var hmacIn [4]uint8
 		var payloadLen uint32
 
-		// Read ctrl/status opcode (csoHmacInvalid on hmac mismatch)
+		// Read ctrl/status opcode (CSOHmacInvalid on hmac mismatch)
 		err = binary.Read(c.c, binary.BigEndian, &ctrlStatOp)
-		if ctrlStatOp == csoHmacInvalid {
+		log.Printf("[ctrlStatOp: %v]\n", ctrlStatOp)
+		if ctrlStatOp == CSOHmacInvalid {
 			// Other side indicated channel tampering, close channel
 			c.Close()
 			return 1, errors.New("** ALERT - remote end detected HMAC mismatch - possible channel tampering **")
@@ -379,8 +390,12 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		}
 
 		// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
-		if ctrlStatOp == csoChaff {
+		if ctrlStatOp == CSOChaff {
 			log.Printf("[Chaff pkt]\n")
+		} else if ctrlStatOp == CSOTermSize {
+			fmt.Sscanf(string(payloadBytes), "%d %d", &c.Rows, &c.Cols)
+			log.Printf("[TermSize pkt: rows %v cols %v]\n", c.Rows, c.Cols)
+			c.WinCh <- WinSize{c.Rows, c.Cols}
 		} else {
 			c.dBuf.Write(payloadBytes)
 			//log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
@@ -394,7 +409,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		// Log alert if hmac didn't match, corrupted channel
 		if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
 			fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
-			_, _ = c.c.Write([]byte{csoHmacInvalid})
+			_, _ = c.c.Write([]byte{CSOHmacInvalid})
 		}
 	}
 
@@ -413,6 +428,11 @@ func (c Conn) Read(b []byte) (n int, err error) {
 //
 // See go doc io.Writer
 func (c Conn) Write(b []byte) (n int, err error) {
+	return c.WritePacket(b, CSONone)
+}
+
+// Write a byte slice with specified ctrlStatusOp byte
+func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
 	var hmacOut []uint8
 	var payloadLen uint32
@@ -437,8 +457,7 @@ func (c Conn) Write(b []byte) (n int, err error) {
 	}
 	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
 
-	var ctrlStatOp byte
-	ctrlStatOp = csoNone
+	ctrlStatOp := op
 	_ = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
 
 	// Write hmac LSB, payloadLen followed by payload

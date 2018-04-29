@@ -28,6 +28,8 @@ type cmdSpec struct {
 	who        []byte
 	cmd        []byte
 	authCookie []byte
+	termRows   []byte
+	termCols   []byte
 	status     int
 }
 
@@ -119,6 +121,15 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err
 	}
 	// Make sure to close the pty at the end.
 	defer func() { _ = ptmx.Close() }() // Best effort.
+
+	// Watch for term resizes
+	go func() {
+		for sz := range conn.WinCh {
+			log.Printf("[Setting term size to: %v %v]\n", sz.Rows, sz.Cols)
+			pty.Setsize(ptmx, &pty.Winsize{Rows: sz.Rows, Cols: sz.Cols})
+		}
+	}()
+
 	// Copy stdin to the pty.. (bgnd goroutine)
 	go func() {
 		_, _ = io.Copy(ptmx, conn)
@@ -171,8 +182,8 @@ func main() {
 		// Wait for a connection.
 		conn, err := l.Accept()
 		if err != nil {
-				log.Printf("Accept() got error(%v), hanging up.\n", err)
-				conn.Close()
+			log.Printf("Accept() got error(%v), hanging up.\n", err)
+			conn.Close()
 			//log.Fatal(err)
 		} else {
 			log.Println("Accepted client")

@@ -14,9 +14,12 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
+	"os/signal"
 	"os/user"
 	"strings"
 	"sync"
+	"syscall"
 
 	hkexsh "blitter.com/go/hkexsh"
 	isatty "github.com/mattn/go-isatty"
@@ -28,6 +31,23 @@ type cmdSpec struct {
 	cmd        []byte
 	authCookie []byte
 	status     int
+}
+
+// get terminal size using 'stty' command
+// (Most portable btwn Linux and MSYS/win32, but
+//  TODO: remove external dep on 'stty' utility)
+func getTermSize() (rows int, cols int, err error) {
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	out, err := cmd.Output()
+	//fmt.Printf("out: %#v\n", string(out))
+	//fmt.Printf("err: %#v\n", err)
+
+	fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return
 }
 
 // Demo of a simple client that dials up to a simple test server to
@@ -76,6 +96,9 @@ func main() {
 	}
 	defer conn.Close()
 	// From this point on, conn is a secure encrypted channel
+
+	rows := 0
+	cols := 0
 
 	// Set stdin in raw mode if it's an interactive session
 	// TODO: send flag to server side indicating this
@@ -131,7 +154,9 @@ func main() {
 		authCookie: []byte(authCookie),
 		status:     0}
 
-	_, err = fmt.Fprintf(conn, "%d %d %d %d\n", len(rec.op), len(rec.who), len(rec.cmd), len(rec.authCookie))
+	_, err = fmt.Fprintf(conn, "%d %d %d %d\n",
+		len(rec.op), len(rec.who), len(rec.cmd), len(rec.authCookie))
+
 	_, err = conn.Write(rec.op)
 	_, err = conn.Write(rec.who)
 	_, err = conn.Write(rec.cmd)
@@ -168,6 +193,27 @@ func main() {
 	}()
 
 	if isInteractive {
+		// Handle pty resizes (notify server side)
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGWINCH)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for range ch {
+				// Query client's term size so we can communicate it to server
+				// pty after interactive session starts
+				rows, cols, err = getTermSize()
+				log.Printf("[rows %v cols %v]\n", rows, cols)
+				if err != nil {
+					panic(err)
+				}
+				termSzPacket := fmt.Sprintf("%d %d", rows, cols)
+				conn.WritePacket([]byte(termSzPacket), hkexsh.CSOTermSize)
+			}
+		}()
+		ch <- syscall.SIGWINCH // Initial resize.
+
 		// client writer (to server) goroutine
 		wg.Add(1)
 		go func() {
