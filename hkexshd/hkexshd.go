@@ -28,8 +28,6 @@ type cmdSpec struct {
 	who        []byte
 	cmd        []byte
 	authCookie []byte
-	termRows   []byte
-	termCols   []byte
 	status     int
 }
 

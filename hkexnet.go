@@ -391,7 +391,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 
 		// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
 		if ctrlStatOp == CSOChaff {
-			log.Printf("[Chaff pkt]\n")
+			log.Printf("[Chaff pkt, discarded]\n")
 		} else if ctrlStatOp == CSOTermSize {
 			fmt.Sscanf(string(payloadBytes), "%d %d", &c.Rows, &c.Cols)
 			log.Printf("[TermSize pkt: rows %v cols %v]\n", c.Rows, c.Cols)
@@ -428,7 +428,8 @@ func (c Conn) Read(b []byte) (n int, err error) {
 //
 // See go doc io.Writer
 func (c Conn) Write(b []byte) (n int, err error) {
-	return c.WritePacket(b, CSONone)
+	n, err = c.WritePacket(b, CSONone)
+	return n, err
 }
 
 // Write a byte slice with specified ctrlStatusOp byte
@@ -440,6 +441,11 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
 
 	payloadLen = uint32(len(b))
+
+	// Testing: '`1' will trigger a chaff packet
+	//if payloadLen == 2 && string(b) == "`1" {
+	//	op = CSOChaff
+	//}
 
 	// Calculate hmac on payload
 	c.wm.Write(b)
@@ -458,13 +464,14 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
 
 	ctrlStatOp := op
-	_ = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
 
+	//{
+	_ = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
 	// Write hmac LSB, payloadLen followed by payload
 	_ = binary.Write(c.c, binary.BigEndian, hmacOut)
 	_ = binary.Write(c.c, binary.BigEndian, payloadLen)
-
 	n, err = c.c.Write(wb.Bytes())
+	//}
 	if err != nil {
 		//panic(err)
 		log.Println(err)
