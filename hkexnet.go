@@ -25,6 +25,7 @@ import (
 	"math/big"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -391,7 +392,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 
 		// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
 		if ctrlStatOp == CSOChaff {
-			log.Printf("[Chaff pkt, discarded]\n")
+			log.Printf("[Chaff pkt, discarded (len %d)]\n", decryptN)
 		} else if ctrlStatOp == CSOTermSize {
 			fmt.Sscanf(string(payloadBytes), "%d %d", &c.Rows, &c.Cols)
 			log.Printf("[TermSize pkt: rows %v cols %v]\n", c.Rows, c.Cols)
@@ -477,4 +478,49 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 		log.Println(err)
 	}
 	return
+}
+
+// hkexsh.Copy() is a modified version of io.Copy() with locking,
+// on a passed-in mutex, around the actual call to Write() to permit
+// multiple producers to write hkexsh buffers to the same destination.
+//
+// (Used to generate chaff during sessions)
+func Copy(m *sync.Mutex, dst io.Writer, src io.Reader) (written int64, err error) {
+	//	// If the reader has a WriteTo method, use it to do the copy.
+	//	// Avoids an allocation and a copy.
+	//	if wt, ok := src.(io.WriterTo); ok {
+	//		return wt.WriteTo(dst)
+	//	}
+	//	// Similarly, if the writer has a ReadFrom method, use it to do the copy.
+	//	if rt, ok := dst.(io.ReaderFrom); ok {
+	//		return rt.ReadFrom(src)
+	//	}
+
+	buf := make([]byte, 32*1024)
+	for {
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			m.Lock()
+			nw, ew := dst.Write(buf[0:nr])
+			m.Unlock()
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
+	return written, err
 }

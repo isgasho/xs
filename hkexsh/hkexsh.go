@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -220,15 +221,19 @@ func main() {
 		ch <- syscall.SIGWINCH // Initial resize.
 
 		// client chaffing goroutine
+		// TODO: Consider making this a feature of hkexsh.Conn itself
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
 			for {
 				m.Lock()
-				conn.WritePacket([]byte("CHAFF"), hkexsh.CSOChaff)
+				chaff := make([]byte, rand.Intn(512))
+				nextDurationMin := 1000 //ms
+				nextDuration := rand.Intn(5000-nextDurationMin) + nextDurationMin
+				_, _ = rand.Read(chaff)
+				conn.WritePacket(chaff, hkexsh.CSOChaff)
 				m.Unlock()
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(time.Duration(nextDuration) * time.Millisecond)
 			}
 		}()
 
@@ -241,7 +246,7 @@ func main() {
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
 			_, outerr := func(m *sync.Mutex, conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
-				return safeCopy(m, conn, r)
+				return hkexsh.Copy(m, conn, r)
 			}(m, conn, os.Stdin)
 
 			if outerr != nil {
@@ -259,44 +264,4 @@ func main() {
 
 	// Wait until both stdin and stdout goroutines finish
 	wg.Wait()
-}
-
-func safeCopy(m *sync.Mutex, dst io.Writer, src io.Reader) (written int64, err error) {
-	//	// If the reader has a WriteTo method, use it to do the copy.
-	//	// Avoids an allocation and a copy.
-	//	if wt, ok := src.(io.WriterTo); ok {
-	//		return wt.WriteTo(dst)
-	//	}
-	//	// Similarly, if the writer has a ReadFrom method, use it to do the copy.
-	//	if rt, ok := dst.(io.ReaderFrom); ok {
-	//		return rt.ReadFrom(src)
-	//	}
-
-	buf := make([]byte, 32*1024)
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			m.Lock()
-			nw, ew := dst.Write(buf[0:nr])
-			m.Unlock()
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er != nil {
-			if er != io.EOF {
-				err = er
-			}
-			break
-		}
-	}
-	return written, err
 }
