@@ -194,7 +194,7 @@ func main() {
 		}
 	}()
 
-	m := &sync.Mutex{}
+	//m := &sync.Mutex{}
 
 	if isInteractive {
 		// Handle pty resizes (notify server side)
@@ -213,9 +213,9 @@ func main() {
 					panic(err)
 				}
 				termSzPacket := fmt.Sprintf("%d %d", rows, cols)
-				m.Lock()
+				conn.Rwmut.Lock()
 				conn.WritePacket([]byte(termSzPacket), hkexsh.CSOTermSize)
-				m.Unlock()
+				conn.Rwmut.Unlock()
 			}
 		}()
 		ch <- syscall.SIGWINCH // Initial resize.
@@ -226,13 +226,13 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for {
-				m.Lock()
 				chaff := make([]byte, rand.Intn(512))
 				nextDurationMin := 1000 //ms
 				nextDuration := rand.Intn(5000-nextDurationMin) + nextDurationMin
 				_, _ = rand.Read(chaff)
+				conn.Rwmut.Lock()
 				conn.WritePacket(chaff, hkexsh.CSOChaff)
-				m.Unlock()
+				conn.Rwmut.Unlock()
 				time.Sleep(time.Duration(nextDuration) * time.Millisecond)
 			}
 		}()
@@ -245,9 +245,9 @@ func main() {
 			// io.Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
-			_, outerr := func(m *sync.Mutex, conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
-				return hkexsh.Copy(m, conn, r)
-			}(m, conn, os.Stdin)
+			_, outerr := func(conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
+				return hkexsh.Copy(&conn.Rwmut, conn, r)
+			}(conn, os.Stdin)
 
 			if outerr != nil {
 				log.Println(outerr)

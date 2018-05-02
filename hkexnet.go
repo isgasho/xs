@@ -52,6 +52,7 @@ type Conn struct {
 	WinCh      chan WinSize
 	Rows       uint16
 	Cols       uint16
+	Rwmut      sync.Mutex
 	r          cipher.Stream //read cipherStream
 	rm         hash.Hash
 	w          cipher.Stream //write cipherStream
