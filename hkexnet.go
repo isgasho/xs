@@ -449,6 +449,14 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	var hmacOut []uint8
 	var payloadLen uint32
 
+	// N.B. Originally this Lock() surrounded only the
+	// calls to binary.Write(c.c ..) however there appears
+	// to be some other unshareable state in the Conn
+	// struct that must be protected to serialize main and
+	// chaff data written to it.
+	//
+	// Would be nice to determine if the mutex scope
+	// could be tightened.
 	c.Rwmut.Lock()
 	{
 		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
@@ -506,8 +514,6 @@ func (c *Conn) Chaff(enable bool, msecsMin int, msecsMax int, szMax int) {
 }
 
 // Helper routine to spawn a chaffing goroutine for each Conn
-// TODO: if/when server->client chaffing is added, server must
-// todo: ensure this is turned off on client hangup
 func (c *Conn) chaffHelper(szMax int) {
 	go func() {
 		for {
@@ -519,7 +525,7 @@ func (c *Conn) chaffHelper(szMax int) {
 				_, _ = rand.Read(chaff)
 				_, err := c.WritePacket(chaff, CSOChaff)
 				if err != nil {
-					log.Println("[ *** error writing chaff - end chaffing *** ]")
+					log.Println("[ *** error - chaffHelper quitting *** ]")
 					break
 				}
 			}
