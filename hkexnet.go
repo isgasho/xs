@@ -23,6 +23,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -52,12 +53,17 @@ type Conn struct {
 	WinCh      chan WinSize
 	Rows       uint16
 	Cols       uint16
-	Rwmut      sync.Mutex
-	r          cipher.Stream //read cipherStream
-	rm         hash.Hash
-	w          cipher.Stream //write cipherStream
-	wm         hash.Hash
-	dBuf       *bytes.Buffer //decrypt buffer for Read()
+
+	Rwmut         *sync.Mutex
+	chaff         bool
+	chaffMsecsMin int //msecs min interval
+	chaffMsecsMax int //msecs max interval
+
+	r    cipher.Stream //read cipherStream
+	rm   hash.Hash
+	w    cipher.Stream //write cipherStream
+	wm   hash.Hash
+	dBuf *bytes.Buffer //decrypt buffer for Read()
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -141,7 +147,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
-	hc = &Conn{c: c, h: New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = &Conn{c: c, h: New(0, 0), Rwmut: &sync.Mutex{}, dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// Send hkexnet.Conn parameters to remote side
@@ -268,13 +274,15 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		return Conn{c: nil, h: nil, cipheropts: 0, opts: 0,
-			r: nil, w: nil}, err
+		hc := Conn{c: nil, h: nil, cipheropts: 0, opts: 0, Rwmut: &sync.Mutex{},
+			r: nil, w: nil}
+		return hc, err
 	}
 	log.Println("[Accepted]")
 
 	hc = Conn{c: c, h: New(0, 0), WinCh: make(chan WinSize, 1),
-		dBuf: new(bytes.Buffer)}
+		Rwmut: &sync.Mutex{},
+		dBuf:  new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
@@ -341,6 +349,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 				log.Println("unexpected Read() err:", err)
 			} else {
 				log.Println("[Client hung up]")
+				// TODO: Stop chaff if active
 			}
 			return 0, err
 		}
@@ -440,40 +449,44 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	var hmacOut []uint8
 	var payloadLen uint32
 
-	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
+	c.Rwmut.Lock()
+	{
+		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
 
-	payloadLen = uint32(len(b))
+		payloadLen = uint32(len(b))
 
-	// Testing: '`1' will trigger a chaff packet
-	//if payloadLen == 2 && string(b) == "`1" {
-	//	op = CSOChaff
-	//}
+		// Calculate hmac on payload
+		c.wm.Write(b)
+		hmacOut = c.wm.Sum(nil)[0:4]
 
-	// Calculate hmac on payload
-	c.wm.Write(b)
-	hmacOut = c.wm.Sum(nil)[0:4]
+		log.Printf("  (%04x> HMAC(o):%s\r\n", payloadLen, hex.EncodeToString(hmacOut))
 
-	log.Printf("  (%04x> HMAC(o):%s\r\n", payloadLen, hex.EncodeToString(hmacOut))
+		var wb bytes.Buffer
+		// The StreamWriter acts like a pipe, forwarding whatever is
+		// written to it through the cipher, encrypting as it goes
+		ws := &cipher.StreamWriter{S: c.w, W: &wb}
+		_, err = ws.Write(b)
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
 
-	var wb bytes.Buffer
-	// The StreamWriter acts like a pipe, forwarding whatever is
-	// written to it through the cipher, encrypting as it goes
-	ws := &cipher.StreamWriter{S: c.w, W: &wb}
-	_, err = ws.Write(b)
-	if err != nil {
-		panic(err)
+		ctrlStatOp := op
+
+		err = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
+		if err == nil {
+			// Write hmac LSB, payloadLen followed by payload
+			err = binary.Write(c.c, binary.BigEndian, hmacOut)
+			if err == nil {
+				err = binary.Write(c.c, binary.BigEndian, payloadLen)
+				if err == nil {
+					n, err = c.c.Write(wb.Bytes())
+				}
+			}
+		}
 	}
-	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
+	c.Rwmut.Unlock()
 
-	ctrlStatOp := op
-
-	//{
-	_ = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
-	// Write hmac LSB, payloadLen followed by payload
-	_ = binary.Write(c.c, binary.BigEndian, hmacOut)
-	_ = binary.Write(c.c, binary.BigEndian, payloadLen)
-	n, err = c.c.Write(wb.Bytes())
-	//}
 	if err != nil {
 		//panic(err)
 		log.Println(err)
@@ -481,12 +494,42 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	return
 }
 
-// hkexsh.Copy() is a modified version of io.Copy() with locking,
-// on a passed-in mutex, around the actual call to Write() to permit
-// multiple producers to write hkexsh buffers to the same destination.
-//
-// (Used to generate chaff during sessions)
-func Copy(m *sync.Mutex, dst io.Writer, src io.Reader) (written int64, err error) {
+func (c *Conn) Chaff(enable bool, msecsMin int, msecsMax int, szMax int) {
+	c.chaff = enable
+	c.chaffMsecsMin = msecsMin //move these to params of chaffHelper() ?
+	c.chaffMsecsMax = msecsMax
+
+	if enable {
+		log.Println("Chaffing ENABLED")
+		c.chaffHelper(szMax)
+	}
+}
+
+// Helper routine to spawn a chaffing goroutine for each Conn
+// TODO: if/when server->client chaffing is added, server must
+// todo: ensure this is turned off on client hangup
+func (c *Conn) chaffHelper(szMax int) {
+	go func() {
+		for {
+			var nextDuration int
+			if c.chaff {
+				chaff := make([]byte, rand.Intn(szMax))
+				min := c.chaffMsecsMin
+				nextDuration = rand.Intn(c.chaffMsecsMax-min) + min
+				_, _ = rand.Read(chaff)
+				_, err := c.WritePacket(chaff, CSOChaff)
+				if err != nil {
+					log.Println("[ *** error writing chaff - end chaffing *** ]")
+					break
+				}
+			}
+			time.Sleep(time.Duration(nextDuration) * time.Millisecond)
+		}
+	}()
+}
+
+// hkexsh.Copy() is a modified version of io.Copy()
+func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
 	//	// If the reader has a WriteTo method, use it to do the copy.
 	//	// Avoids an allocation and a copy.
 	//	if wt, ok := src.(io.WriterTo); ok {
@@ -501,9 +544,7 @@ func Copy(m *sync.Mutex, dst io.Writer, src io.Reader) (written int64, err error
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {
-			m.Lock()
 			nw, ew := dst.Write(buf[0:nr])
-			m.Unlock()
 			if nw > 0 {
 				written += int64(nw)
 			}

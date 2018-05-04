@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -21,7 +20,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	hkexsh "blitter.com/go/hkexsh"
 	isatty "github.com/mattn/go-isatty"
@@ -194,8 +192,6 @@ func main() {
 		}
 	}()
 
-	//m := &sync.Mutex{}
-
 	if isInteractive {
 		// Handle pty resizes (notify server side)
 		ch := make(chan os.Signal, 1)
@@ -213,40 +209,22 @@ func main() {
 					panic(err)
 				}
 				termSzPacket := fmt.Sprintf("%d %d", rows, cols)
-				conn.Rwmut.Lock()
 				conn.WritePacket([]byte(termSzPacket), hkexsh.CSOTermSize)
-				conn.Rwmut.Unlock()
 			}
 		}()
 		ch <- syscall.SIGWINCH // Initial resize.
-
-		// client chaffing goroutine
-		// TODO: Consider making this a feature of hkexsh.Conn itself
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				chaff := make([]byte, rand.Intn(512))
-				nextDurationMin := 1000 //ms
-				nextDuration := rand.Intn(5000-nextDurationMin) + nextDurationMin
-				_, _ = rand.Read(chaff)
-				conn.Rwmut.Lock()
-				conn.WritePacket(chaff, hkexsh.CSOChaff)
-				conn.Rwmut.Unlock()
-				time.Sleep(time.Duration(nextDuration) * time.Millisecond)
-			}
-		}()
 
 		// client writer (to server) goroutine
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			// io.Copy() expects EOF so this will
+			// Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
+			conn.Chaff(true, 100, 500, 32) // enable client->server chaffing
 			_, outerr := func(conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
-				return hkexsh.Copy(&conn.Rwmut, conn, r)
+				return hkexsh.Copy(conn, r)
 			}(conn, os.Stdin)
 
 			if outerr != nil {
@@ -258,6 +236,8 @@ func main() {
 				}
 			}
 			log.Println("[Sent EOF]")
+			//FIXME: regression circa. April 30 2018 on 'exit' from client,
+			//fixme: Enter/RETURN required prior to actua client exit
 			wg.Done() // client hung up, close WaitGroup to exit client
 		}()
 	}
