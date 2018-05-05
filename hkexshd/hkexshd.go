@@ -131,7 +131,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err
 
 	// Copy stdin to the pty.. (bgnd goroutine)
 	go func() {
-		_, _ = hkexsh.Copy(ptmx, conn)
+		_, _ = io.Copy(ptmx, conn)
 	}()
 
 	// ..and the pty to stdout.
@@ -140,8 +140,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err
 	// --knowledge of another thread which would do chaffing.
 	// --Modify pty somehow to slave the command through hkexsh.Copy() ?
 	conn.Chaff(true, 100, 500, 32)
-	_, _ = hkexsh.Copy(conn, ptmx)
-	//_, _ = io.Copy(conn, ptmx)
+	_, _ = io.Copy(conn, ptmx)
 
 	//err = c.Run()  // returns when c finishes.
 

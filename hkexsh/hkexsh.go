@@ -230,7 +230,7 @@ func main() {
 			//!_, outerr := io.Copy(conn, os.Stdin)
 			conn.Chaff(true, 100, 500, 32) // enable client->server chaffing
 			_, outerr := func(conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
-				return hkexsh.Copy(conn, r)
+				return io.Copy(conn, r)
 			}(conn, os.Stdin)
 
 			if outerr != nil {
