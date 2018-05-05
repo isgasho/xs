@@ -46,6 +46,7 @@ type WinSize struct {
 
 // Conn is a HKex connection - a drop-in replacement for net.Conn
 type Conn struct {
+	m          *sync.Mutex
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
 	h          *HerraduraKEx
 	cipheropts uint32 // post-KEx cipher/hmac options
@@ -54,7 +55,6 @@ type Conn struct {
 	Rows       uint16
 	Cols       uint16
 
-	Rwmut         *sync.Mutex
 	chaff         bool
 	chaffMsecsMin int //msecs min interval
 	chaffMsecsMax int //msecs max interval
@@ -147,7 +147,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
-	hc = &Conn{c: c, h: New(0, 0), Rwmut: &sync.Mutex{}, dBuf: new(bytes.Buffer)}
+	hc = &Conn{m: &sync.Mutex{}, c: c, h: New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// Send hkexnet.Conn parameters to remote side
@@ -274,15 +274,14 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := Conn{c: nil, h: nil, cipheropts: 0, opts: 0, Rwmut: &sync.Mutex{},
+		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, cipheropts: 0, opts: 0,
 			r: nil, w: nil}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{c: c, h: New(0, 0), WinCh: make(chan WinSize, 1),
-		Rwmut: &sync.Mutex{},
-		dBuf:  new(bytes.Buffer)}
+	hc = Conn{m: &sync.Mutex{}, c: c, h: New(0, 0), WinCh: make(chan WinSize, 1),
+		dBuf: new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
@@ -454,7 +453,7 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//
 	// Would be nice to determine if the mutex scope
 	// could be tightened.
-	c.Rwmut.Lock()
+	c.m.Lock()
 	{
 		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
 
@@ -490,7 +489,7 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 			}
 		}
 	}
-	c.Rwmut.Unlock()
+	c.m.Unlock()
 
 	if err != nil {
 		//panic(err)
