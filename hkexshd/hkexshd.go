@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"syscall"
 
 	hkexsh "blitter.com/go/hkexsh"
@@ -246,6 +247,12 @@ func main() {
 					rec.op[0], string(rec.who), string(rec.cmd))
 
 				valid, allowedCmds := hkexsh.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
+				// Security scrub
+				for i := range rec.authCookie {
+					rec.authCookie[i] = 0
+				}
+				runtime.GC()
+
 				if !valid {
 					log.Println("Invalid user", string(rec.who))
 					c.Write([]byte(rejectUserMsg()))

@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -79,7 +80,7 @@ func main() {
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
 	flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
 	flag.StringVar(&altUser, "u", "", "specify alternate user")
-	flag.StringVar(&authCookie, "a", "", "auth cookie (MultiCheese3999(tm) 2FA cookie")
+	flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
@@ -145,6 +146,9 @@ func main() {
 			panic(err)
 		}
 		authCookie = string(ab)
+		// Security scrub
+		ab = nil
+		runtime.GC()
 	}
 
 	rec := &cmdSpec{
@@ -187,8 +191,10 @@ func main() {
 		}
 
 		if isInteractive {
-			log.Println("[Got EOF]")
-			wg.Done() // server hung up, close WaitGroup to exit client
+			log.Println("[* Got EOF *]")
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+			wg.Done()
+			os.Exit(0)
 		}
 	}()
 
@@ -236,8 +242,6 @@ func main() {
 				}
 			}
 			log.Println("[Sent EOF]")
-			//FIXME: regression circa. April 30 2018 on 'exit' from client,
-			//fixme: Enter/RETURN required prior to actua client exit
 			wg.Done() // client hung up, close WaitGroup to exit client
 		}()
 	}

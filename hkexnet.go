@@ -319,8 +319,6 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 // See go doc io.Reader
 func (c Conn) Read(b []byte) (n int, err error) {
 	//log.Printf("[Decrypting...]\r\n")
-	log.Printf("Read() requests %d bytes\n", len(b))
-
 	for {
 		//log.Printf("c.dBuf.Len(): %d\n", c.dBuf.Len())
 		if c.dBuf.Len() > 0 /* len(b) */ {
@@ -349,7 +347,6 @@ func (c Conn) Read(b []byte) (n int, err error) {
 				log.Println("unexpected Read() err:", err)
 			} else {
 				log.Println("[Client hung up]")
-				// TODO: Stop chaff if active
 			}
 			return 0, err
 		}
@@ -536,15 +533,15 @@ func (c *Conn) chaffHelper(szMax int) {
 
 // hkexsh.Copy() is a modified version of io.Copy()
 func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
-	//	// If the reader has a WriteTo method, use it to do the copy.
-	//	// Avoids an allocation and a copy.
-	//	if wt, ok := src.(io.WriterTo); ok {
-	//		return wt.WriteTo(dst)
-	//	}
-	//	// Similarly, if the writer has a ReadFrom method, use it to do the copy.
-	//	if rt, ok := dst.(io.ReaderFrom); ok {
-	//		return rt.ReadFrom(src)
-	//	}
+	// If the reader has a WriteTo method, use it to do the copy.
+	// Avoids an allocation and a copy.
+	if wt, ok := src.(io.WriterTo); ok {
+		return wt.WriteTo(dst)
+	}
+	// Similarly, if the writer has a ReadFrom method, use it to do the copy.
+	if rt, ok := dst.(io.ReaderFrom); ok {
+		return rt.ReadFrom(src)
+	}
 
 	buf := make([]byte, 32*1024)
 	for {

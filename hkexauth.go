@@ -28,9 +28,6 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 	}
 	r := csv.NewReader(bytes.NewReader(b))
 
-	b = nil
-	runtime.GC() // Paranoia and prob. not effective; kill authFile in b[]
-
 	r.Comma = ':'
 	r.Comment = '#'
 	r.FieldsPerRecord = 4 // username:salt:authCookie:disallowedCmdList (a,b,...)
@@ -51,5 +48,13 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 			break
 		}
 	}
+	// Security scrub
+	for i := range b {
+		b[i] = 0
+	}
+	b = nil
+	r = nil
+	runtime.GC()
+
 	return
 }
