@@ -44,6 +44,13 @@ type WinSize struct {
 	Cols uint16
 }
 
+type ChaffConfig struct {
+	enabled  bool
+	msecsMin uint //msecs min interval
+	msecsMax uint //msecs max interval
+	szMax    uint // max size in bytes
+}
+
 // Conn is a HKex connection - a drop-in replacement for net.Conn
 type Conn struct {
 	m          *sync.Mutex
@@ -55,9 +62,7 @@ type Conn struct {
 	Rows       uint16
 	Cols       uint16
 
-	chaff         bool
-	chaffMsecsMin int //msecs min interval
-	chaffMsecsMax int //msecs max interval
+	chaff ChaffConfig
 
 	r    cipher.Stream //read cipherStream
 	rm   hash.Hash
@@ -498,30 +503,32 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	return
 }
 
-func (c *Conn) Chaff(enable bool, msecsMin int, msecsMax int, szMax int) {
-	c.chaff = enable
-	c.chaffMsecsMin = msecsMin //move these to params of chaffHelper() ?
-	c.chaffMsecsMax = msecsMax
+func (c *Conn) EnableChaff() {
+	c.chaff.enabled = true
+	log.Println("Chaffing ENABLED")
+	c.chaffHelper()
+}
 
-	if enable {
-		log.Println("Chaffing ENABLED")
-		c.chaffHelper(szMax)
-	}
+func (c *Conn) Chaff(msecsMin uint, msecsMax uint, szMax uint) {
+	c.chaff.msecsMin = msecsMin //move these to params of chaffHelper() ?
+	c.chaff.msecsMax = msecsMax
+	c.chaff.szMax = szMax
 }
 
 // Helper routine to spawn a chaffing goroutine for each Conn
-func (c *Conn) chaffHelper(szMax int) {
+func (c *Conn) chaffHelper() {
 	go func() {
 		for {
 			var nextDuration int
-			if c.chaff {
-				chaff := make([]byte, rand.Intn(szMax))
-				min := c.chaffMsecsMin
-				nextDuration = rand.Intn(c.chaffMsecsMax-min) + min
-				_, _ = rand.Read(chaff)
-				_, err := c.WritePacket(chaff, CSOChaff)
+			if c.chaff.enabled {
+				bufTmp := make([]byte, rand.Intn(int(c.chaff.szMax)))
+				min := int(c.chaff.msecsMin)
+				nextDuration = rand.Intn(int(c.chaff.msecsMax)-min) + min
+				_, _ = rand.Read(bufTmp)
+				_, err := c.WritePacket(bufTmp, CSOChaff)
 				if err != nil {
 					log.Println("[ *** error - chaffHelper quitting *** ]")
+					c.chaff.enabled = false
 					break
 				}
 			}

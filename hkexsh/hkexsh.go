@@ -73,6 +73,10 @@ func main() {
 	var cmdStr string
 	var altUser string
 	var authCookie string
+	var chaffFreqMin uint
+	var chaffFreqMax uint
+	var chaffBytesMax uint
+	
 	isInteractive := false
 
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
@@ -81,6 +85,9 @@ func main() {
 	flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
 	flag.StringVar(&altUser, "u", "", "specify alternate user")
 	flag.StringVar(&authCookie, "a", "", "auth cookie")
+	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
+	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
+	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
@@ -228,7 +235,8 @@ func main() {
 			// Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
-			conn.Chaff(true, 100, 500, 32) // enable client->server chaffing
+			conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
+			conn.EnableChaff()
 			_, outerr := func(conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
 				return io.Copy(conn, r)
 			}(conn, os.Stdin)

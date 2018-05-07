@@ -134,12 +134,9 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err
 		_, _ = io.Copy(ptmx, conn)
 	}()
 
+	conn.EnableChaff()
+
 	// ..and the pty to stdout.
-	// --(FIXME: server->client chaffing can't work here as-is, since we
-	// --pty.Start()ed the command above, and that command has no
-	// --knowledge of another thread which would do chaffing.
-	// --Modify pty somehow to slave the command through hkexsh.Copy() ?
-	conn.Chaff(true, 100, 500, 32)
 	_, _ = io.Copy(conn, ptmx)
 
 	//err = c.Run()  // returns when c finishes.
@@ -161,10 +158,16 @@ func rejectUserMsg() string {
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
+	var chaffFreqMin uint
+	var chaffFreqMax uint
+	var chaffBytesMax uint
 	var dbg bool
 	var laddr string
 
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
+	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
+	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
+	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
@@ -192,6 +195,9 @@ func main() {
 			//log.Fatal(err)
 		} else {
 			log.Println("Accepted client")
+
+			// Set up chaffing to client
+			conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 
 			// Handle the connection in a new goroutine.
 			// The loop then returns to accepting, so that
