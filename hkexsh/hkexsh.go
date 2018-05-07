@@ -76,7 +76,7 @@ func main() {
 	var chaffFreqMin uint
 	var chaffFreqMax uint
 	var chaffBytesMax uint
-	
+
 	isInteractive := false
 
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
@@ -143,6 +143,11 @@ func main() {
 		cmdStr = strings.Trim(string(cmdStdin), "\r\n")
 	} else {
 		op = []byte{'c'}
+		// non-interactive cmds may complete quickly, so chaff earlier/faster
+		// to help ensure there's some cover to the brief traffic.
+		// (ignoring cmdline values)
+		chaffFreqMin = 2
+		chaffFreqMax = 10
 	}
 
 	if len(authCookie) == 0 {
@@ -172,6 +177,10 @@ func main() {
 	_, err = conn.Write(rec.who)
 	_, err = conn.Write(rec.cmd)
 	_, err = conn.Write(rec.authCookie)
+
+	// Set up chaffing to server
+	conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
+	conn.EnableChaff()
 
 	//client reader (from server) goroutine
 	wg.Add(1)
@@ -235,8 +244,6 @@ func main() {
 			// Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
-			conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
-			conn.EnableChaff()
 			_, outerr := func(conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
 				return io.Copy(conn, r)
 			}(conn, os.Stdin)
