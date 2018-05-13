@@ -66,6 +66,8 @@ func getTermSize() (rows int, cols int, err error) {
 func main() {
 	var wg sync.WaitGroup
 
+	version := "0.1pre (NO WARRANTY)"
+	var vopt bool
 	var dbg bool
 	var cAlg string
 	var hAlg string
@@ -79,6 +81,7 @@ func main() {
 
 	isInteractive := false
 
+	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
@@ -90,6 +93,11 @@ func main() {
 	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
+
+	if vopt {
+		fmt.Printf("version v%s\n", version)
+		os.Exit(0)
+	}
 
 	if dbg {
 		log.SetOutput(os.Stdout)

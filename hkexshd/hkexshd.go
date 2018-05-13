@@ -158,18 +158,26 @@ func rejectUserMsg() string {
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
+	version := "0.1pre (NO WARRANTY)"
+	var vopt bool
 	var chaffFreqMin uint
 	var chaffFreqMax uint
 	var chaffBytesMax uint
 	var dbg bool
 	var laddr string
 
+	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
 	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
 	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
 	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
+
+	if vopt {
+		fmt.Printf("version v%s\n",  version)
+		os.Exit(0)
+	}
 
 	if dbg {
 		log.SetOutput(os.Stdout)
