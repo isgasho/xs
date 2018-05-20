@@ -15,12 +15,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"os/user"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 
 	hkexsh "blitter.com/go/hkexsh"
 	isatty "github.com/mattn/go-isatty"
@@ -112,9 +110,6 @@ func main() {
 	}
 	defer conn.Close()
 	// From this point on, conn is a secure encrypted channel
-
-	rows := 0
-	cols := 0
 
 	// Set stdin in raw mode if it's an interactive session
 	// TODO: send flag to server side indicating this
@@ -223,26 +218,7 @@ func main() {
 	}()
 
 	if isInteractive {
-		// Handle pty resizes (notify server side)
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGWINCH)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for range ch {
-				// Query client's term size so we can communicate it to server
-				// pty after interactive session starts
-				rows, cols, err = getTermSize()
-				log.Printf("[rows %v cols %v]\n", rows, cols)
-				if err != nil {
-					panic(err)
-				}
-				termSzPacket := fmt.Sprintf("%d %d", rows, cols)
-				conn.WritePacket([]byte(termSzPacket), hkexsh.CSOTermSize)
-			}
-		}()
-		ch <- syscall.SIGWINCH // Initial resize.
+		handleTermResizes()
 
 		// client writer (to server) goroutine
 		wg.Add(1)
