@@ -79,7 +79,7 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err error) {
+func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn, chaffing bool) (err error) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -134,8 +134,10 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn) (err
 		_, _ = io.Copy(ptmx, conn)
 	}()
 
-	conn.EnableChaff()
-
+	if chaffing {
+		conn.EnableChaff()
+	}
+	
 	// ..and the pty to stdout.
 	_, _ = io.Copy(conn, ptmx)
 
@@ -160,6 +162,7 @@ func rejectUserMsg() string {
 func main() {
 	version := "0.1pre (NO WARRANTY)"
 	var vopt bool
+	var chaffEnabled bool
 	var chaffFreqMin uint
 	var chaffFreqMax uint
 	var chaffBytesMax uint
@@ -168,6 +171,7 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
+	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts (default true)")
 	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
 	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
 	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
@@ -175,7 +179,7 @@ func main() {
 	flag.Parse()
 
 	if vopt {
-		fmt.Printf("version v%s\n",  version)
+		fmt.Printf("version v%s\n", version)
 		os.Exit(0)
 	}
 
@@ -205,7 +209,9 @@ func main() {
 			log.Println("Accepted client")
 
 			// Set up chaffing to client
-			conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
+			// Will only start when runShellAs() is called
+			// after stdin/stdout are hooked up
+			conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // configure server->client chaffing
 
 			// Handle the connection in a new goroutine.
 			// The loop then returns to accepting, so that
@@ -276,14 +282,14 @@ func main() {
 				if rec.op[0] == 'c' {
 					// Non-interactive command
 					log.Println("[Running command]")
-					runShellAs(string(rec.who), string(rec.cmd), false, conn)
+					runShellAs(string(rec.who), string(rec.cmd), false, conn, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.op[0] = 0
 					log.Println("[Command complete]")
 				} else if rec.op[0] == 's' {
 					log.Println("[Running shell]")
-					runShellAs(string(rec.who), string(rec.cmd), true, conn)
+					runShellAs(string(rec.who), string(rec.cmd), true, conn, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.op[0] = 0

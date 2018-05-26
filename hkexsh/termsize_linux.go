@@ -12,7 +12,7 @@ import (
 )
 
 // Handle pty resizes (notify server side)
-func handleTermResizes() {
+func handleTermResizes(conn *hkexsh.Conn) {
 	rows := 0
 	cols := 0
 
@@ -25,10 +25,10 @@ func handleTermResizes() {
 		for range ch {
 			// Query client's term size so we can communicate it to server
 			// pty after interactive session starts
-			rows, cols, err = getTermSize()
+			cols, rows, err = GetSize()
 			log.Printf("[rows %v cols %v]\n", rows, cols)
 			if err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			termSzPacket := fmt.Sprintf("%d %d", rows, cols)
 			conn.WritePacket([]byte(termSzPacket), hkexsh.CSOTermSize)

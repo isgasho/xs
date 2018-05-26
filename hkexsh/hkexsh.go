@@ -32,19 +32,21 @@ type cmdSpec struct {
 	status     int
 }
 
-// get terminal size using 'stty' command
-// (Most portable btwn Linux and MSYS/win32, but
-//  TODO: remove external dep on 'stty' utility)
-func getTermSize() (rows int, cols int, err error) {
+var (
+	wg sync.WaitGroup
+)
+
+// Get terminal size using 'stty' command
+func GetSize() (cols, rows int, err error) {
 	cmd := exec.Command("stty", "size")
 	cmd.Stdin = os.Stdin
 	out, err := cmd.Output()
-	//fmt.Printf("out: %#v\n", string(out))
-	//fmt.Printf("err: %#v\n", err)
 
-	fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		cols, rows = 80, 24  //failsafe
+	} else {
+		fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
 	}
 	return
 }
@@ -62,8 +64,6 @@ func getTermSize() (rows int, cols int, err error) {
 // connection (app-specific, passed through to the server to use or
 // ignore at its discretion).
 func main() {
-	var wg sync.WaitGroup
-
 	version := "0.1pre (NO WARRANTY)"
 	var vopt bool
 	var dbg bool
@@ -73,6 +73,7 @@ func main() {
 	var cmdStr string
 	var altUser string
 	var authCookie string
+	var chaffEnabled bool
 	var chaffFreqMin uint
 	var chaffFreqMax uint
 	var chaffBytesMax uint
@@ -86,6 +87,7 @@ func main() {
 	flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
 	flag.StringVar(&altUser, "u", "", "specify alternate user")
 	flag.StringVar(&authCookie, "a", "", "auth cookie")
+	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts (default true)")
 	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
 	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
 	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
@@ -183,7 +185,9 @@ func main() {
 
 	// Set up chaffing to server
 	conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
-	conn.EnableChaff()
+	if chaffEnabled {
+		conn.EnableChaff()
+	}
 
 	//client reader (from server) goroutine
 	wg.Add(1)
@@ -218,7 +222,7 @@ func main() {
 	}()
 
 	if isInteractive {
-		handleTermResizes()
+		handleTermResizes(conn)
 
 		// client writer (to server) goroutine
 		wg.Add(1)
