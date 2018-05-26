@@ -15,8 +15,13 @@ lib:
 client: lib
 	cd hkexsh; go build .; cd -
 
+ifneq (MSYSTEM,)
+server: lib
+	@echo "hkexshd server not supported on Windows (yet)"
+else
 server: lib
 	cd hkexshd; go build .; cd -
+endif
 
 passwd: lib
 	cd hkexpasswd; go build .; cd -
