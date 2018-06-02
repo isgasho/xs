@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"blitter.com/go/go_login"
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/spinsult"
 	"github.com/kr/pty"
@@ -137,7 +138,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn, chaf
 	if chaffing {
 		conn.EnableChaff()
 	}
-	
+
 	// ..and the pty to stdout.
 	_, _ = io.Copy(conn, ptmx)
 
@@ -289,6 +290,9 @@ func main() {
 					log.Println("[Command complete]")
 				} else if rec.op[0] == 's' {
 					log.Println("[Running shell]")
+					utmpx := go_login.Put_utmp(string(rec.who), string("todo.example.org"))
+					defer func() { go_login.Unput_utmp(utmpx) }()
+					go_login.Put_lastlog_entry("hkexsh", string(rec.who), string("todo.example.org"))
 					runShellAs(string(rec.who), string(rec.cmd), true, conn, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
