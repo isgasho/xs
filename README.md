@@ -60,7 +60,7 @@ To set accounts & passwords:
 --
 * $ sudo echo "joebloggs:*:*:*" >/etc/hkexsh.passwd
 * $ sudo hkexpasswd/hkexpasswd -u joebloggs
-* $ <enter a password, enter again to confirm>
+* $ &lt;enter a password, enter again to confirm&gt;
 
 Running Clent and Server. In separate shells:
 --
