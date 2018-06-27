@@ -184,11 +184,13 @@ func main() {
 	_, err = conn.Write(rec.authCookie)
 
 	// Set up chaffing to server
-	conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
+	conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 	if chaffEnabled {
 		conn.EnableChaff()
 	}
-
+	defer conn.DisableChaff()
+	defer conn.ShutdownChaff()
+	
 	//client reader (from server) goroutine
 	wg.Add(1)
 	go func() {

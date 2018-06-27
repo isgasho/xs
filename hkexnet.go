@@ -34,6 +34,7 @@ const (
 	CSONone        = iota // No error, normal packet
 	CSOHmacInvalid        // HMAC mismatch detected on remote end
 	CSOTermSize           // set term size (rows:cols)
+	CSOExitStatus         // Remote cmd exit status (TODO)
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
 
@@ -45,6 +46,7 @@ type WinSize struct {
 }
 
 type ChaffConfig struct {
+	shutdown bool //set to inform chaffHelper to shut down
 	enabled  bool
 	msecsMin uint //msecs min interval
 	msecsMax uint //msecs max interval
@@ -184,6 +186,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 
 // Close a hkex.Conn
 func (c Conn) Close() (err error) {
+	c.DisableChaff()
 	err = c.c.Close()
 	log.Println("[Conn Closing]")
 	return
@@ -358,7 +361,8 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		err = binary.Read(c.c, binary.BigEndian, &payloadLen)
 		if err != nil {
 			if err.Error() != "EOF" {
-				panic(err)
+				log.Println("unexpected Read() err:", err)
+				//panic(err)
 				// Cannot just return 0, err here - client won't hang up properly
 				// when 'exit' from shell. TODO: try server sending ctrlStatOp to
 				// indicate to Reader? -rlm 20180428
@@ -504,12 +508,23 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 }
 
 func (c *Conn) EnableChaff() {
+	c.chaff.shutdown = false
 	c.chaff.enabled = true
 	log.Println("Chaffing ENABLED")
 	c.chaffHelper()
 }
 
-func (c *Conn) Chaff(msecsMin uint, msecsMax uint, szMax uint) {
+func (c *Conn) DisableChaff() {
+	c.chaff.enabled = false
+	log.Println("Chaffing DISABLED")
+}
+
+func (c *Conn) ShutdownChaff() {
+	c.chaff.shutdown = true
+	log.Println("Chaffing SHUTDOWN")
+}
+
+func (c *Conn) SetupChaff(msecsMin uint, msecsMax uint, szMax uint) {
 	c.chaff.msecsMin = msecsMin //move these to params of chaffHelper() ?
 	c.chaff.msecsMax = msecsMax
 	c.chaff.szMax = szMax
@@ -533,6 +548,11 @@ func (c *Conn) chaffHelper() {
 				}
 			}
 			time.Sleep(time.Duration(nextDuration) * time.Millisecond)
+			if c.chaff.shutdown {
+				log.Println("*** chaffHelper shutting down")
+				break
+			}
+
 		}
 	}()
 }

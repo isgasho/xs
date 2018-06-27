@@ -132,15 +132,25 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn, chaf
 
 	// Copy stdin to the pty.. (bgnd goroutine)
 	go func() {
-		_, _ = io.Copy(ptmx, conn)
+		_, e := io.Copy(ptmx, conn)
+		if e != nil {
+			log.Printf("** std->pty ended **\n")
+			return
+		}
 	}()
 
 	if chaffing {
 		conn.EnableChaff()
 	}
+	defer conn.DisableChaff()
+	defer conn.ShutdownChaff()
 
 	// ..and the pty to stdout.
-	_, _ = io.Copy(conn, ptmx)
+	_, e := io.Copy(conn, ptmx)
+	if e != nil {
+		log.Printf("** pty->stdout ended **\n")
+		return
+	}
 
 	//err = c.Run()  // returns when c finishes.
 
@@ -212,7 +222,7 @@ func main() {
 			// Set up chaffing to client
 			// Will only start when runShellAs() is called
 			// after stdin/stdout are hooked up
-			conn.Chaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // configure server->client chaffing
+			conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // configure server->client chaffing
 
 			// Handle the connection in a new goroutine.
 			// The loop then returns to accepting, so that
