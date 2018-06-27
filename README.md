@@ -22,6 +22,10 @@ Above the hkex.Conn layer, the server and client apps in this repository
 algorithms, interactive/non-interactive, etc.) to be used for further
 communication.
 
+Packets are subject to random padding, and (optionally) the client and server
+channels can both send _chaff_ packets at random defineable intervals to help
+thwart analysis of session activity (especially for interactive shell sessions).
+
 NOTE: Due to the experimental nature of the HerraduraKEx algorithm used to
 derive crypto keying material, this algorithm and the demonstration remote
 shell client/server programs should be used with caution and should definitely
@@ -45,24 +49,30 @@ Dependencies:
 * [github.com/mattn/go-isatty](http://github.com/mattn/go-isatty) //terminal tty detection
 * [github.com/kr/pty](http://github.com/kr/pty) //unix pty control (server pty connections)
 * [github.com/jameskeane/bcrypt](http://github.com/jameskeane/bcrypt) //password storage/auth
+* [blitter.com/go/goutmp](https://blitter.com/gogs/Russtopia/goutmp) // wtmp/lastlog C bindings
 
 Get source code
 --
-* $ go get -u github.com/Russtopia/hkexsh
-* $ go get github.com/mattn/go-isatty  ## only used by demos, not picked up by above go get -u?
+* $ go get -u blitter.com/go/hkexsh
+* $ cd $GOPATH/src/blitter.com/go/hkexsh
+* $ go build ./... # install all dependent go pkgs
 
 To build
 --
-* $ cd $GOPATH/src/github.com/Russtopia/hkexsh
+* $ cd $GOPATH/src/blitter.com/go/hkexsh
 * $ make clean all
 
 To set accounts & passwords:
 --
-* $ sudo echo "joebloggs:*:*:*" >/etc/hkexsh.passwd
+* $ echo "joebloggs:*:*:*" >hkexsh.passwd
+* $ sudo mv hkexsh.passwd /etc
 * $ sudo hkexpasswd/hkexpasswd -u joebloggs
 * $ &lt;enter a password, enter again to confirm&gt;
 
 Running Clent and Server. In separate shells:
 --
-* [A]$ sudo hkexshd/hkexshd &
-* [B]$ hkexsh/hkexsh -u joebloggs
+* [A]$ sudo hkexshd/hkexshd &  # add -d for debugging
+* [B]$ hkexsh/hkexsh -u joebloggs # add -d for debugging
+
+NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' afterwards to fix up the shell tty afterwards as stty echo may not be restored if client crashes or is interrupted.
+
