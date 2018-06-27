@@ -19,7 +19,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"blitter.com/go/go_login"
+	"blitter.com/go/goutmp"
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/spinsult"
 	"github.com/kr/pty"
@@ -300,9 +300,9 @@ func main() {
 					log.Println("[Command complete]")
 				} else if rec.op[0] == 's' {
 					log.Println("[Running shell]")
-					utmpx := go_login.Put_utmp(string(rec.who), string("todo.example.org"))
-					defer func() { go_login.Unput_utmp(utmpx) }()
-					go_login.Put_lastlog_entry("hkexsh", string(rec.who), string("todo.example.org"))
+					utmpx := goutmp.Put_utmp(string(rec.who), string("todo.example.org"))
+					defer func() { goutmp.Unput_utmp(utmpx) }()
+					goutmp.Put_lastlog_entry("hkexsh", string(rec.who), string("todo.example.org"))
 					runShellAs(string(rec.who), string(rec.cmd), true, conn, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
