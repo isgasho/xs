@@ -295,7 +295,7 @@ func main() {
 					addr := c.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
 
-					log.Println("[Running command for [%s@%s]]\n", rec.who, hname)
+					log.Printf("[Running command for [%s@%s]]\n", rec.who, hname)
 					runShellAs(string(rec.who), string(rec.cmd), false, conn, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
@@ -305,7 +305,7 @@ func main() {
 					// Interactive session
 					addr := c.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					log.Println("[Running shell for [%s@%s]]\n", rec.who, hname)
+					log.Printf("[Running shell for [%s@%s]]\n", rec.who, hname)
 
 					utmpx := goutmp.Put_utmp(string(rec.who), hname)
 					defer func() { goutmp.Unput_utmp(utmpx) }()
