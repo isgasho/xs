@@ -200,6 +200,13 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
+	{
+		me, e := user.Current()
+		if e != nil || me.Uid != "0" {
+			log.Fatal("Must run as root.")
+		}
+	}
+
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
 	l, err := hkexsh.Listen("tcp", laddr)
