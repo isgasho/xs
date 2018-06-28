@@ -300,9 +300,11 @@ func main() {
 					log.Println("[Command complete]")
 				} else if rec.op[0] == 's' {
 					log.Println("[Running shell]")
-					utmpx := goutmp.Put_utmp(string(rec.who), string("todo.example.org"))
+					addr := c.RemoteAddr()
+
+					utmpx := goutmp.Put_utmp(string(rec.who), addr.String())
 					defer func() { goutmp.Unput_utmp(utmpx) }()
-					goutmp.Put_lastlog_entry("hkexsh", string(rec.who), string("todo.example.org"))
+					goutmp.Put_lastlog_entry("hkexsh", string(rec.who), addr.String())
 					runShellAs(string(rec.who), string(rec.cmd), true, conn, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
