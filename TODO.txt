@@ -1,0 +1,23 @@
+HKExSh TODO Ideas:2018-05-06
+--
+Chaff Improvements
+- Zipf or other distributions for chaff freq, packetsz
+- Mimicry of hand-typed traffic for chaff on interactive sessions
+- Client-input chaff file data (ie., Moby Dick)
+
+Architecture
+- Move hkexnet components other than key exchange into a proper hkex package
+  (ie., hkexsh imports hkex) - hkex should be usable for other client/svr utils,
+  ala 'hkex-netcat')
+- Make KEx fully-pluggable: isolate all code to do with Herradura into a
+  KEx-neutral pkg so it can be swapped out for other methods (eg., DH etc.)
+
+Features
+- Suport for hkcp (hkex-cp) - secure file copy protocol
+- hktun - tunnelling - multiple tunnel sessions co-existing w/shell sessions
+
+Alternate transports for hkexsh.Conn - HTTP-mimicking traffic, ICMP, ... ?
+(Whatever golang can support for net.Dial(), net.Accept(), io.Reader/Writer
+ should in principle be usable as substrate for hkex.Conn)
+- hekxsh-over-ssh
+
