@@ -1,4 +1,4 @@
-HKExSh TODO Ideas:2018-05-06
+HKExSh TODO Ideas
 --
 Chaff Improvements
 - Zipf or other distributions for chaff freq, packetsz
@@ -13,7 +13,7 @@ Architecture
   KEx-neutral pkg so it can be swapped out for other methods (eg., DH etc.)
 
 Features
-- Suport for hkcp (hkex-cp) - secure file copy protocol
+- Support for hkcp (hkex-cp) - secure file copy protocol
 - hktun - tunnelling - multiple tunnel sessions co-existing w/shell sessions
 
 Alternate transports for hkexsh.Conn - HTTP-mimicking traffic, ICMP, ... ?
