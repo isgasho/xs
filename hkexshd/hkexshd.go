@@ -157,10 +157,9 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn, chaf
 				log.Printf("** pty->stdout ended **\n")
 				return
 			}
+			// The above io.Copy() will exit when the command attached
+			// to the pty exits
 		}()
-
-		// The above io.Copy() will exit when the command attached
-		// to the pty exits
 
 		if err := c.Wait(); err != nil {
 			if exiterr, ok := err.(*exec.ExitError); ok {
@@ -201,7 +200,7 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
-	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts (default true)")
+	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts")
 	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
 	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
 	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
@@ -253,8 +252,8 @@ func main() {
 			// Handle the connection in a new goroutine.
 			// The loop then returns to accepting, so that
 			// multiple connections may be served concurrently.
-			go func(c hkexsh.Conn) (e error) {
-				defer c.Close()
+			go func(hc hkexsh.Conn) (e error) {
+				defer hc.Close()
 
 				//We use io.ReadFull() here to guarantee we consume
 				//just the data we want for the cmdSpec, and no more.
@@ -263,7 +262,7 @@ func main() {
 				var rec cmdSpec
 				var len1, len2, len3, len4 uint32
 
-				n, err := fmt.Fscanf(c, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
+				n, err := fmt.Fscanf(hc, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
 				log.Printf("cmdSpec read:%d %d %d %d\n", len1, len2, len3, len4)
 
 				if err != nil || n < 4 {
@@ -273,27 +272,27 @@ func main() {
 				//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
 
 				rec.op = make([]byte, len1, len1)
-				_, err = io.ReadFull(c, rec.op)
+				_, err = io.ReadFull(hc, rec.op)
 				if err != nil {
 					log.Println("[Bad cmdSpec.op]")
 					return err
 				}
 				rec.who = make([]byte, len2, len2)
-				_, err = io.ReadFull(c, rec.who)
+				_, err = io.ReadFull(hc, rec.who)
 				if err != nil {
 					log.Println("[Bad cmdSpec.who]")
 					return err
 				}
 
 				rec.cmd = make([]byte, len3, len3)
-				_, err = io.ReadFull(c, rec.cmd)
+				_, err = io.ReadFull(hc, rec.cmd)
 				if err != nil {
 					log.Println("[Bad cmdSpec.cmd]")
 					return err
 				}
 
 				rec.authCookie = make([]byte, len4, len4)
-				_, err = io.ReadFull(c, rec.authCookie)
+				_, err = io.ReadFull(hc, rec.authCookie)
 				if err != nil {
 					log.Println("[Bad cmdSpec.authCookie]")
 					return err
@@ -311,18 +310,18 @@ func main() {
 
 				if !valid {
 					log.Println("Invalid user", string(rec.who))
-					c.Write([]byte(rejectUserMsg()))
+					hc.Write([]byte(rejectUserMsg()))
 					return
 				}
 				log.Printf("[allowedCmds:%s]\n", allowedCmds)
 
 				if rec.op[0] == 'c' {
 					// Non-interactive command
-					addr := c.RemoteAddr()
+					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
 
 					log.Printf("[Running command for [%s@%s]]\n", rec.who, hname)
-					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), false, conn, chaffEnabled)
+					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.op[0] = 0
@@ -330,17 +329,18 @@ func main() {
 						log.Printf("[Error spawning cmd for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						hc.SetStatus(uint8(cmdStatus))
 					}
 				} else if rec.op[0] == 's' {
 					// Interactive session
-					addr := c.RemoteAddr()
+					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
 					log.Printf("[Running shell for [%s@%s]]\n", rec.who, hname)
 
 					utmpx := goutmp.Put_utmp(string(rec.who), hname)
 					defer func() { goutmp.Unput_utmp(utmpx) }()
 					goutmp.Put_lastlog_entry("hkexsh", string(rec.who), hname)
-					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), true, conn, chaffEnabled)
+					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), true, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.op[0] = 0
@@ -348,6 +348,7 @@ func main() {
 						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						hc.SetStatus(uint8(cmdStatus))
 					}
 				} else {
 					log.Println("[Bad cmdSpec]")

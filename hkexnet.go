@@ -11,7 +11,9 @@ package hkexsh
 
 // Implementation of HKEx-wrapped versions of the golang standard
 // net package interfaces, allowing clients and servers to simply replace
-// 'net.Dial' and 'net.Listen' with 'hkex.Dial' and 'hkex.Listen'.
+// 'net.Dial' and 'net.Listen' with 'hkex.Dial' and 'hkex.Listen'
+// (though some extra methods are implemented and must be used
+//  for things outside of the scope of plain sockets).
 import (
 	"bytes"
 	"crypto/cipher"
@@ -53,7 +55,7 @@ type ChaffConfig struct {
 	szMax    uint // max size in bytes
 }
 
-// Conn is a HKex connection - a drop-in replacement for net.Conn
+// Conn is a HKex connection - a superset of net.Conn
 type Conn struct {
 	m          *sync.Mutex
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
@@ -66,11 +68,21 @@ type Conn struct {
 
 	chaff ChaffConfig
 
-	r    cipher.Stream //read cipherStream
-	rm   hash.Hash
-	w    cipher.Stream //write cipherStream
-	wm   hash.Hash
-	dBuf *bytes.Buffer //decrypt buffer for Read()
+	closeStat *uint8        // close status (shell exit status: UNIX uint8)
+	r         cipher.Stream //read cipherStream
+	rm        hash.Hash
+	w         cipher.Stream //write cipherStream
+	wm        hash.Hash
+	dBuf      *bytes.Buffer //decrypt buffer for Read()
+}
+
+func (hc Conn) GetStatus() uint8 {
+	return *hc.closeStat
+}
+
+func (hc *Conn) SetStatus(stat uint8) {
+	*hc.closeStat = stat
+	log.Println("closeStat:", *hc.closeStat)
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -78,16 +90,16 @@ type Conn struct {
 //
 // (Used for protocol-level negotiations after KEx such as
 // cipher/HMAC algorithm options etc.)
-func (c Conn) ConnOpts() uint32 {
-	return c.cipheropts
+func (hc Conn) ConnOpts() uint32 {
+	return hc.cipheropts
 }
 
 // SetConnOpts sets the cipher/hmac options value, which is sent to the
 // peer as part of KEx but not part of the KEx itself.
 //
 // opts - bitfields for cipher and hmac alg. to use after KEx
-func (c *Conn) SetConnOpts(copts uint32) {
-	c.cipheropts = copts
+func (hc *Conn) SetConnOpts(copts uint32) {
+	hc.cipheropts = copts
 }
 
 // Opts returns the protocol options value, which is sent to the peer
@@ -95,8 +107,8 @@ func (c *Conn) SetConnOpts(copts uint32) {
 //
 // Consumers of this lib may use this for protocol-level options not part
 // of the KEx or encryption info used by the connection.
-func (c Conn) Opts() uint32 {
-	return c.opts
+func (hc Conn) Opts() uint32 {
+	return hc.opts
 }
 
 // SetOpts sets the protocol options value, which is sent to the peer
@@ -106,32 +118,32 @@ func (c Conn) Opts() uint32 {
 // of the KEx of encryption info used by the connection.
 //
 // opts - a uint32, caller-defined
-func (c *Conn) SetOpts(opts uint32) {
-	c.opts = opts
+func (hc *Conn) SetOpts(opts uint32) {
+	hc.opts = opts
 }
 
-func (c *Conn) applyConnExtensions(extensions ...string) {
+func (hc *Conn) applyConnExtensions(extensions ...string) {
 	for _, s := range extensions {
 		switch s {
 		case "C_AES_256":
 			log.Println("[extension arg = C_AES_256]")
-			c.cipheropts &= (0xFFFFFF00)
-			c.cipheropts |= CAlgAES256
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= CAlgAES256
 			break
 		case "C_TWOFISH_128":
 			log.Println("[extension arg = C_TWOFISH_128]")
-			c.cipheropts &= (0xFFFFFF00)
-			c.cipheropts |= CAlgTwofish128
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= CAlgTwofish128
 			break
 		case "C_BLOWFISH_64":
 			log.Println("[extension arg = C_BLOWFISH_64]")
-			c.cipheropts &= (0xFFFFFF00)
-			c.cipheropts |= CAlgBlowfish64
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= CAlgBlowfish64
 			break
 		case "H_SHA256":
 			log.Println("[extension arg = H_SHA256]")
-			c.cipheropts &= (0xFFFF00FF)
-			c.cipheropts |= (HmacSHA256 << 8)
+			hc.cipheropts &= (0xFFFF00FF)
+			hc.cipheropts |= (HmacSHA256 << 8)
 			break
 		default:
 			log.Printf("[Dial ext \"%s\" ignored]\n", s)
@@ -154,7 +166,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
-	hc = &Conn{m: &sync.Mutex{}, c: c, h: New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint8), h: New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// Send hkexnet.Conn parameters to remote side
@@ -181,25 +193,29 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 
 	hc.r, hc.rm, err = hc.getStream(hc.h.fa)
 	hc.w, hc.wm, err = hc.getStream(hc.h.fa)
+
+	*hc.closeStat = 99 // open or prematurely-closed status
 	return
 }
 
 // Close a hkex.Conn
-func (c Conn) Close() (err error) {
-	c.DisableChaff()
-	err = c.c.Close()
+func (hc Conn) Close() (err error) {
+	hc.DisableChaff()
+	hc.WritePacket([]byte{byte(*hc.closeStat)}, CSOExitStatus)
+	*hc.closeStat = 0
+	err = hc.c.Close()
 	log.Println("[Conn Closing]")
 	return
 }
 
 // LocalAddr returns the local network address.
-func (c Conn) LocalAddr() net.Addr {
-	return c.c.LocalAddr()
+func (hc Conn) LocalAddr() net.Addr {
+	return hc.c.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address.
-func (c Conn) RemoteAddr() net.Addr {
-	return c.c.RemoteAddr()
+func (hc Conn) RemoteAddr() net.Addr {
+	return hc.c.RemoteAddr()
 }
 
 // SetDeadline sets the read and write deadlines associated
@@ -217,8 +233,8 @@ func (c Conn) RemoteAddr() net.Addr {
 // the deadline after successful Read or Write calls.
 //
 // A zero value for t means I/O operations will not time out.
-func (c Conn) SetDeadline(t time.Time) error {
-	return c.SetDeadline(t)
+func (hc Conn) SetDeadline(t time.Time) error {
+	return hc.c.SetDeadline(t)
 }
 
 // SetWriteDeadline sets the deadline for future Write calls
@@ -226,15 +242,15 @@ func (c Conn) SetDeadline(t time.Time) error {
 // Even if write times out, it may return n > 0, indicating that
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
-func (c Conn) SetWriteDeadline(t time.Time) error {
-	return c.SetWriteDeadline(t)
+func (hc Conn) SetWriteDeadline(t time.Time) error {
+	return hc.c.SetWriteDeadline(t)
 }
 
 // SetReadDeadline sets the deadline for future Read calls
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
-func (c Conn) SetReadDeadline(t time.Time) error {
-	return c.SetReadDeadline(t)
+func (hc Conn) SetReadDeadline(t time.Time) error {
+	return hc.c.SetReadDeadline(t)
 }
 
 /*---------------------------------------------------------------------*/
@@ -282,13 +298,13 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, cipheropts: 0, opts: 0,
+		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(uint8), cipheropts: 0, opts: 0,
 			r: nil, w: nil}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{m: &sync.Mutex{}, c: c, h: New(0, 0), WinCh: make(chan WinSize, 1),
+	hc = Conn{m: &sync.Mutex{}, c: c, h: New(0, 0), closeStat: new(uint8), WinCh: make(chan WinSize, 1),
 		dBuf: new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
@@ -324,11 +340,11 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 // Read into a byte slice
 //
 // See go doc io.Reader
-func (c Conn) Read(b []byte) (n int, err error) {
+func (hc Conn) Read(b []byte) (n int, err error) {
 	//log.Printf("[Decrypting...]\r\n")
 	for {
-		//log.Printf("c.dBuf.Len(): %d\n", c.dBuf.Len())
-		if c.dBuf.Len() > 0 /* len(b) */ {
+		//log.Printf("hc.dBuf.Len(): %d\n", hc.dBuf.Len())
+		if hc.dBuf.Len() > 0 /* len(b) */ {
 			break
 		}
 
@@ -337,16 +353,16 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		var payloadLen uint32
 
 		// Read ctrl/status opcode (CSOHmacInvalid on hmac mismatch)
-		err = binary.Read(c.c, binary.BigEndian, &ctrlStatOp)
+		err = binary.Read(hc.c, binary.BigEndian, &ctrlStatOp)
 		log.Printf("[ctrlStatOp: %v]\n", ctrlStatOp)
 		if ctrlStatOp == CSOHmacInvalid {
 			// Other side indicated channel tampering, close channel
-			c.Close()
+			hc.Close()
 			return 1, errors.New("** ALERT - remote end detected HMAC mismatch - possible channel tampering **")
 		}
 
 		// Read the hmac and payload len first
-		err = binary.Read(c.c, binary.BigEndian, &hmacIn)
+		err = binary.Read(hc.c, binary.BigEndian, &hmacIn)
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
@@ -358,7 +374,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 			return 0, err
 		}
 
-		err = binary.Read(c.c, binary.BigEndian, &payloadLen)
+		err = binary.Read(hc.c, binary.BigEndian, &payloadLen)
 		if err != nil {
 			if err.Error() != "EOF" {
 				log.Println("unexpected Read() err:", err)
@@ -371,13 +387,13 @@ func (c Conn) Read(b []byte) (n int, err error) {
 
 		if payloadLen > 16384 {
 			log.Printf("[Insane payloadLen:%v]\n", payloadLen)
-			c.Close()
+			hc.Close()
 			return 1, errors.New("Insane payloadLen")
 		}
 		//log.Println("payloadLen:", payloadLen)
 
 		var payloadBytes = make([]byte, payloadLen)
-		n, err = io.ReadFull(c.c, payloadBytes)
+		n, err = io.ReadFull(hc.c, payloadBytes)
 		//log.Print(" << Read ", n, " payloadBytes")
 
 		// Normal client 'exit' from interactive session will cause
@@ -396,7 +412,7 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		// The StreamReader acts like a pipe, decrypting
 		// whatever is available and forwarding the result
 		// to the parameter of Read() as a normal io.Reader
-		rs := &cipher.StreamReader{S: c.r, R: db}
+		rs := &cipher.StreamReader{S: hc.r, R: db}
 		// The caller isn't necessarily reading the full payload so we need
 		// to decrypt ot an intermediate buffer, draining it on demand of caller
 		decryptN, err := rs.Read(payloadBytes)
@@ -409,75 +425,77 @@ func (c Conn) Read(b []byte) (n int, err error) {
 		if ctrlStatOp == CSOChaff {
 			log.Printf("[Chaff pkt, discarded (len %d)]\n", decryptN)
 		} else if ctrlStatOp == CSOTermSize {
-			fmt.Sscanf(string(payloadBytes), "%d %d", &c.Rows, &c.Cols)
-			log.Printf("[TermSize pkt: rows %v cols %v]\n", c.Rows, c.Cols)
-			c.WinCh <- WinSize{c.Rows, c.Cols}
+			fmt.Sscanf(string(payloadBytes), "%d %d", &hc.Rows, &hc.Cols)
+			log.Printf("[TermSize pkt: rows %v cols %v]\n", hc.Rows, hc.Cols)
+			hc.WinCh <- WinSize{hc.Rows, hc.Cols}
+		} else if ctrlStatOp == CSOExitStatus {
+			*hc.closeStat = uint8(payloadBytes[0])
 		} else {
-			c.dBuf.Write(payloadBytes)
-			//log.Printf("c.dBuf: %s\n", hex.Dump(c.dBuf.Bytes()))
+			hc.dBuf.Write(payloadBytes)
+			//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
 		}
 
 		// Re-calculate hmac, compare with received value
-		c.rm.Write(payloadBytes)
-		hTmp := c.rm.Sum(nil)[0:4]
+		hc.rm.Write(payloadBytes)
+		hTmp := hc.rm.Sum(nil)[0:4]
 		log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
 		// Log alert if hmac didn't match, corrupted channel
 		if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
 			fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
-			_, _ = c.c.Write([]byte{CSOHmacInvalid})
+			_, _ = hc.c.Write([]byte{CSOHmacInvalid})
 		}
 	}
 
-	retN := c.dBuf.Len()
+	retN := hc.dBuf.Len()
 	if retN > len(b) {
 		retN = len(b)
 	}
 
 	log.Printf("Read() got %d bytes\n", retN)
-	copy(b, c.dBuf.Next(retN))
-	//log.Printf("As Read() returns, c.dBuf is %d long: %s\n", c.dBuf.Len(), hex.Dump(c.dBuf.Bytes()))
+	copy(b, hc.dBuf.Next(retN))
+	//log.Printf("As Read() returns, hc.dBuf is %d long: %s\n", hc.dBuf.Len(), hex.Dump(hc.dBuf.Bytes()))
 	return retN, nil
 }
 
 // Write a byte slice
 //
 // See go doc io.Writer
-func (c Conn) Write(b []byte) (n int, err error) {
-	n, err = c.WritePacket(b, CSONone)
+func (hc Conn) Write(b []byte) (n int, err error) {
+	n, err = hc.WritePacket(b, CSONone)
 	return n, err
 }
 
 // Write a byte slice with specified ctrlStatusOp byte
-func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
+func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
 	var hmacOut []uint8
 	var payloadLen uint32
 
 	// N.B. Originally this Lock() surrounded only the
-	// calls to binary.Write(c.c ..) however there appears
+	// calls to binary.Write(hc.c ..) however there appears
 	// to be some other unshareable state in the Conn
 	// struct that must be protected to serialize main and
 	// chaff data written to it.
 	//
 	// Would be nice to determine if the mutex scope
 	// could be tightened.
-	c.m.Lock()
+	hc.m.Lock()
 	{
 		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
 
 		payloadLen = uint32(len(b))
 
 		// Calculate hmac on payload
-		c.wm.Write(b)
-		hmacOut = c.wm.Sum(nil)[0:4]
+		hc.wm.Write(b)
+		hmacOut = hc.wm.Sum(nil)[0:4]
 
 		log.Printf("  (%04x> HMAC(o):%s\r\n", payloadLen, hex.EncodeToString(hmacOut))
 
 		var wb bytes.Buffer
 		// The StreamWriter acts like a pipe, forwarding whatever is
 		// written to it through the cipher, encrypting as it goes
-		ws := &cipher.StreamWriter{S: c.w, W: &wb}
+		ws := &cipher.StreamWriter{S: hc.w, W: &wb}
 		_, err = ws.Write(b)
 		if err != nil {
 			panic(err)
@@ -486,19 +504,19 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 
 		ctrlStatOp := op
 
-		err = binary.Write(c.c, binary.BigEndian, &ctrlStatOp)
+		err = binary.Write(hc.c, binary.BigEndian, &ctrlStatOp)
 		if err == nil {
 			// Write hmac LSB, payloadLen followed by payload
-			err = binary.Write(c.c, binary.BigEndian, hmacOut)
+			err = binary.Write(hc.c, binary.BigEndian, hmacOut)
 			if err == nil {
-				err = binary.Write(c.c, binary.BigEndian, payloadLen)
+				err = binary.Write(hc.c, binary.BigEndian, payloadLen)
 				if err == nil {
-					n, err = c.c.Write(wb.Bytes())
+					n, err = hc.c.Write(wb.Bytes())
 				}
 			}
 		}
 	}
-	c.m.Unlock()
+	hc.m.Unlock()
 
 	if err != nil {
 		//panic(err)
@@ -507,48 +525,48 @@ func (c Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	return
 }
 
-func (c *Conn) EnableChaff() {
-	c.chaff.shutdown = false
-	c.chaff.enabled = true
+func (hc *Conn) EnableChaff() {
+	hc.chaff.shutdown = false
+	hc.chaff.enabled = true
 	log.Println("Chaffing ENABLED")
-	c.chaffHelper()
+	hc.chaffHelper()
 }
 
-func (c *Conn) DisableChaff() {
-	c.chaff.enabled = false
+func (hc *Conn) DisableChaff() {
+	hc.chaff.enabled = false
 	log.Println("Chaffing DISABLED")
 }
 
-func (c *Conn) ShutdownChaff() {
-	c.chaff.shutdown = true
+func (hc *Conn) ShutdownChaff() {
+	hc.chaff.shutdown = true
 	log.Println("Chaffing SHUTDOWN")
 }
 
-func (c *Conn) SetupChaff(msecsMin uint, msecsMax uint, szMax uint) {
-	c.chaff.msecsMin = msecsMin //move these to params of chaffHelper() ?
-	c.chaff.msecsMax = msecsMax
-	c.chaff.szMax = szMax
+func (hc *Conn) SetupChaff(msecsMin uint, msecsMax uint, szMax uint) {
+	hc.chaff.msecsMin = msecsMin //move these to params of chaffHelper() ?
+	hc.chaff.msecsMax = msecsMax
+	hc.chaff.szMax = szMax
 }
 
 // Helper routine to spawn a chaffing goroutine for each Conn
-func (c *Conn) chaffHelper() {
+func (hc *Conn) chaffHelper() {
 	go func() {
 		for {
 			var nextDuration int
-			if c.chaff.enabled {
-				bufTmp := make([]byte, rand.Intn(int(c.chaff.szMax)))
-				min := int(c.chaff.msecsMin)
-				nextDuration = rand.Intn(int(c.chaff.msecsMax)-min) + min
+			if hc.chaff.enabled {
+				bufTmp := make([]byte, rand.Intn(int(hc.chaff.szMax)))
+				min := int(hc.chaff.msecsMin)
+				nextDuration = rand.Intn(int(hc.chaff.msecsMax)-min) + min
 				_, _ = rand.Read(bufTmp)
-				_, err := c.WritePacket(bufTmp, CSOChaff)
+				_, err := hc.WritePacket(bufTmp, CSOChaff)
 				if err != nil {
 					log.Println("[ *** error - chaffHelper quitting *** ]")
-					c.chaff.enabled = false
+					hc.chaff.enabled = false
 					break
 				}
 			}
 			time.Sleep(time.Duration(nextDuration) * time.Millisecond)
-			if c.chaff.shutdown {
+			if hc.chaff.shutdown {
 				log.Println("*** chaffHelper shutting down")
 				break
 			}
