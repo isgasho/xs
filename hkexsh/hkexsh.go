@@ -29,7 +29,7 @@ type cmdSpec struct {
 	who        []byte
 	cmd        []byte
 	authCookie []byte
-	status     int
+	status     int // though UNIX shell exit status is uint8, os.Exit() wants int
 }
 
 var (
@@ -44,7 +44,7 @@ func GetSize() (cols, rows int, err error) {
 
 	if err != nil {
 		log.Println(err)
-		cols, rows = 80, 24  //failsafe
+		cols, rows = 80, 24 //failsafe
 	} else {
 		fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
 	}
@@ -190,7 +190,7 @@ func main() {
 	}
 	defer conn.DisableChaff()
 	defer conn.ShutdownChaff()
-	
+
 	//client reader (from server) goroutine
 	wg.Add(1)
 	go func() {
@@ -215,11 +215,14 @@ func main() {
 			}
 		}
 
+		rec.status = int(conn.GetStatus())
+		log.Println("rec.status:", rec.status)
+
 		if isInteractive {
 			log.Println("[* Got EOF *]")
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 			wg.Done()
-			os.Exit(0)
+			//os.Exit(rec.status)
 		}
 	}()
 
@@ -243,7 +246,7 @@ func main() {
 				if outerr.Error() != "EOF" {
 					fmt.Println(outerr)
 					_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-					os.Exit(2)
+					os.Exit(255)
 				}
 			}
 			log.Println("[Sent EOF]")
@@ -253,4 +256,7 @@ func main() {
 
 	// Wait until both stdin and stdout goroutines finish
 	wg.Wait()
+
+	_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+	os.Exit(rec.status)
 }
