@@ -1,9 +1,10 @@
-.PHONY: info clean lib client server passwd
+.PHONY: info clean common client server passwd subpkgs
 
-SUBDIRS = hkexnet herradurakex hkexpasswd hkexsh hkexshd
-LIBS = hkexnet herradurakex
+SUBPKGS = spinsult hkexnet herradurakex
+TOOLS = hkexpasswd hkexsh hkexshd
+SUBDIRS = $(LIBS) $(TOOLS)
 
-all: lib client server passwd
+all: common client server passwd
 
 clean:
 	go clean .
@@ -11,20 +12,30 @@ clean:
 	  $(MAKE) -C $$d clean;\
 	done
 
-lib:
+subpkgs:
+	for d in $(SUBPKGS); do\
+	  $(MAKE) -C $$d all;\
+	done
+
+tools:
+	for d in $(TOOLS); do\
+	  $(MAKE) -C $$d all;\
+	done
+
+common:
 	go install .
 
-client: lib
+client: common
 	$(MAKE) -C hkexsh
 
 ifneq ($(MSYSTEM),)
-server: lib
-	echo "hkexshd server not supported on Windows (yet)"
+server: common
+	echo "hkexshd server not (yet) supported on Windows"
 else
-server: lib
+server: common
 	$(MAKE) -C hkexshd
 endif
 
-passwd: lib
+passwd: common
 	$(MAKE) -C hkexpasswd
 
