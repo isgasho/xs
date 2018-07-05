@@ -159,7 +159,7 @@ func (h HerraduraKEx) PeerD() *big.Int {
 
 // SetPeerD stores the received peer's D value (contents, not ptr)
 func (h *HerraduraKEx) SetPeerD(pd *big.Int) {
-	*h.peerD = *pd
+	h.peerD = new(big.Int).Set(pd)
 }
 
 // ComputeFA computes the FA value, which must be sent to peer for KEx.

@@ -21,6 +21,7 @@ import (
 
 	"blitter.com/go/goutmp"
 	hkexsh "blitter.com/go/hkexsh"
+	"blitter.com/go/hkexsh/hkexnet"
 	"blitter.com/go/hkexsh/spinsult"
 	"github.com/kr/pty"
 )
@@ -80,7 +81,7 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who string, cmd string, interactive bool, conn hkexsh.Conn, chaffing bool) (err error, exitStatus int) {
+func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus int) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -227,7 +228,7 @@ func main() {
 
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
-	l, err := hkexsh.Listen("tcp", laddr)
+	l, err := hkexnet.Listen("tcp", laddr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -252,7 +253,7 @@ func main() {
 			// Handle the connection in a new goroutine.
 			// The loop then returns to accepting, so that
 			// multiple connections may be served concurrently.
-			go func(hc hkexsh.Conn) (e error) {
+			go func(hc hkexnet.Conn) (e error) {
 				defer hc.Close()
 
 				//We use io.ReadFull() here to guarantee we consume

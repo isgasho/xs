@@ -327,9 +327,9 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	hc.h.SetPeerD(d)
 	log.Printf("** D:%s\n", hc.h.D().Text(16))
 	log.Printf("**(s)** peerD:%s\n", hc.h.PeerD().Text(16))
-	hc.h.FA()
+	hc.h.ComputeFA()
 	log.Printf("**(s)** FA:%s\n", hc.h.FA())
-	
+
 	// Send D and cipheropts/conn_opts to peer
 	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.D().Text(16),
 		hc.cipheropts, hc.opts)

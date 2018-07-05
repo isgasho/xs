@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	hkexsh "blitter.com/go/hkexsh"
+	"blitter.com/go/hkexsh/hkexnet"
 	isatty "github.com/mattn/go-isatty"
 )
 
@@ -105,7 +106,7 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	conn, err := hkexsh.Dial("tcp", server, cAlg, hAlg)
+	conn, err := hkexnet.Dial("tcp", server, cAlg, hAlg)
 	if err != nil {
 		fmt.Println("Err!")
 		panic(err)
@@ -237,7 +238,7 @@ func main() {
 			// Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
-			_, outerr := func(conn *hkexsh.Conn, r io.Reader) (w int64, e error) {
+			_, outerr := func(conn *hkexnet.Conn, r io.Reader) (w int64, e error) {
 				return io.Copy(conn, r)
 			}(conn, os.Stdin)
 
