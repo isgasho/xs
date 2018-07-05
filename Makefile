@@ -1,6 +1,7 @@
-.PHONY: clean lib client server passwd
+.PHONY: info clean lib client server passwd
 
-SUBDIRS = hkexpasswd hkexsh hkexshd
+SUBDIRS = hkexnet herradurakex hkexpasswd hkexsh hkexshd
+LIBS = hkexnet herradurakex
 
 all: lib client server passwd
 

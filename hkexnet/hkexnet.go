@@ -7,7 +7,7 @@
 //
 // golang implementation by Russ Magee (rmagee_at_gmail.com)
 
-package hkexsh
+package hkexnet
 
 // Implementation of HKEx-wrapped versions of the golang standard
 // net package interfaces, allowing clients and servers to simply replace
@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"blitter.com/go/hkexsh/herradurakex"
 )
 
 const (
@@ -59,7 +61,7 @@ type ChaffConfig struct {
 type Conn struct {
 	m          *sync.Mutex
 	c          net.Conn // which also implements io.Reader, io.Writer, ...
-	h          *HerraduraKEx
+	h          *hkex.HerraduraKEx
 	cipheropts uint32 // post-KEx cipher/hmac options
 	opts       uint32 // post-KEx protocol options (caller-defined)
 	WinCh      chan WinSize
@@ -166,12 +168,12 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
-	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint8), h: New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint8), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// Send hkexnet.Conn parameters to remote side
 	// d is value for Herradura key exchange
-	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
 	d := big.NewInt(0)
@@ -179,20 +181,21 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	if err != nil {
 		return nil, err
 	}
+	// Read peer D over net.Conn (c)
 	_, err = fmt.Fscanf(c, "%08x:%08x\n",
 		&hc.cipheropts, &hc.opts)
 	if err != nil {
 		return nil, err
 	}
 
-	hc.h.PeerD = d
-	log.Printf("** D:%s\n", hc.h.d.Text(16))
-	log.Printf("**(c)** peerD:%s\n", hc.h.PeerD.Text(16))
-	hc.h.FA()
-	log.Printf("**(c)** FA:%s\n", hc.h.fa)
+	hc.h.SetPeerD(d)
+	log.Printf("** local D:%s\n", hc.h.D().Text(16))
+	log.Printf("**(c)** peer D:%s\n", hc.h.PeerD().Text(16))
+	hc.h.ComputeFA()
+	log.Printf("**(c)** FA:%s\n", hc.h.FA())
 
-	hc.r, hc.rm, err = hc.getStream(hc.h.fa)
-	hc.w, hc.wm, err = hc.getStream(hc.h.fa)
+	hc.r, hc.rm, err = hc.getStream(hc.h.FA())
+	hc.w, hc.wm, err = hc.getStream(hc.h.FA())
 
 	*hc.closeStat = 99 // open or prematurely-closed status
 	return
@@ -304,7 +307,7 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{m: &sync.Mutex{}, c: c, h: New(0, 0), closeStat: new(uint8), WinCh: make(chan WinSize, 1),
+	hc = Conn{m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(uint8), WinCh: make(chan WinSize, 1),
 		dBuf: new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
@@ -321,17 +324,18 @@ func (hl HKExListener) Accept() (hc Conn, err error) {
 	if err != nil {
 		return hc, err
 	}
-	hc.h.PeerD = d
-	log.Printf("** D:%s\n", hc.h.d.Text(16))
-	log.Printf("**(s)** peerD:%s\n", hc.h.PeerD.Text(16))
+	hc.h.SetPeerD(d)
+	log.Printf("** D:%s\n", hc.h.D().Text(16))
+	log.Printf("**(s)** peerD:%s\n", hc.h.PeerD().Text(16))
 	hc.h.FA()
-	log.Printf("**(s)** FA:%s\n", hc.h.fa)
-
-	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.d.Text(16),
+	log.Printf("**(s)** FA:%s\n", hc.h.FA())
+	
+	// Send D and cipheropts/conn_opts to peer
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
-	hc.r, hc.rm, err = hc.getStream(hc.h.fa)
-	hc.w, hc.wm, err = hc.getStream(hc.h.fa)
+	hc.r, hc.rm, err = hc.getStream(hc.h.FA())
+	hc.w, hc.wm, err = hc.getStream(hc.h.FA())
 	return
 }
 

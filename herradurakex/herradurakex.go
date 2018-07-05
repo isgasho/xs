@@ -15,7 +15,7 @@
 // distribution)
 //
 // golang implementation by Russ Magee (rmagee_at_gmail.com)
-package hkexsh
+package hkex
 
 /*  Herradura - a Key exchange scheme in the style of Diffie-Hellman Key Exchange.
     Copyright (C) 2017 Omar Alejandro Herrera Reyna
@@ -52,7 +52,7 @@ type HerraduraKEx struct {
 	randctx      *rand.Rand
 	a            *big.Int
 	b            *big.Int
-	d, PeerD     *big.Int
+	d, peerD     *big.Int
 	fa           *big.Int
 }
 
@@ -148,22 +148,37 @@ func (h *HerraduraKEx) fscxRevolve(x, y *big.Int, passes int) (result *big.Int) 
 
 // D returns the D (FSCX Revolved) value, input to generate FA
 // (the value for peer KEx)
-func (h *HerraduraKEx) D() *big.Int {
+func (h HerraduraKEx) D() *big.Int {
 	return h.d
 }
 
-// FA returns the FA value, which must be sent to peer for KEx.
-func (h *HerraduraKEx) FA() {
-	h.fa = h.fscxRevolve(h.PeerD, h.b, h.intSz-h.pubSz)
+// PeerD returns the peer D value
+func (h HerraduraKEx) PeerD() *big.Int {
+	return h.peerD
+}
+
+// SetPeerD stores the received peer's D value (contents, not ptr)
+func (h *HerraduraKEx) SetPeerD(pd *big.Int) {
+	*h.peerD = *pd
+}
+
+// ComputeFA computes the FA value, which must be sent to peer for KEx.
+func (h *HerraduraKEx) ComputeFA() {
+	h.fa = h.fscxRevolve(h.peerD, h.b, h.intSz-h.pubSz)
 	h.fa.Xor(h.fa, h.a)
+}
+
+// FA returns the computed FA value
+func (h HerraduraKEx) FA() *big.Int {
+	return h.fa
 }
 
 // Output HerraduraKEx type value as a string. Implements Stringer interface.
 func (h *HerraduraKEx) String() string {
-	return fmt.Sprintf("s:%d p:%d\na:%s\nb:%s\nd:->%s\n<-PeerD:%s\nfa:%s",
+	return fmt.Sprintf("s:%d p:%d\na:%s\nb:%s\nd:->%s\n<-peerD:%s\nfa:%s",
 		h.intSz, h.pubSz,
 		h.a.Text(16), h.b.Text(16),
 		h.d.Text(16),
-		h.PeerD.Text(16),
+		h.peerD.Text(16),
 		h.fa.Text(16))
 }

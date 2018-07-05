@@ -1,4 +1,4 @@
-package hkexsh
+package hkexnet
 
 // Copyright (c) 2017-2018 Russell Magee
 // Licensed under the terms of the MIT license (see LICENSE.mit in this
