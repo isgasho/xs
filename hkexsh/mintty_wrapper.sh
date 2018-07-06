@@ -27,6 +27,11 @@ trap cleanup EXIT ERR
 cleanup() {
   stty sane
 }
-  
-stty -echo raw icrnl
-./hkexsh $@
+
+if [ ${1}x == "-hx" ]; then
+  ./hkexsh -h
+else
+  stty -echo raw icrnl
+  ./hkexsh $@
+fi
+
