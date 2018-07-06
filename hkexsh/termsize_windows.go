@@ -6,11 +6,11 @@ import (
 	"log"
 	"time"
 
-	hkexsh "blitter.com/go/hkexsh"
+	"blitter.com/go/hkexsh/hkexnet"
 )
 
 // Handle pty resizes (notify server side)
-func handleTermResizes(conn *hkexsh.Conn) {
+func handleTermResizes(conn *hkexnet.Conn) {
 	var hasStty bool
 	curCols, curRows := 0, 0
 	_, _, err := GetSize()
@@ -57,7 +57,7 @@ func handleTermResizes(conn *hkexsh.Conn) {
 					log.Println(err)
 				}
 				termSzPacket := fmt.Sprintf("%d %d", curRows, curCols)
-				conn.WritePacket([]byte(termSzPacket), hkexsh.CSOTermSize)
+				conn.WritePacket([]byte(termSzPacket), hkexnet.CSOTermSize)
 			}
 		}
 	}()
