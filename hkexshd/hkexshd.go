@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/user"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"blitter.com/go/goutmp"
@@ -319,7 +320,8 @@ func main() {
 				if rec.op[0] == 'c' {
 					// Non-interactive command
 					addr := hc.RemoteAddr()
-					hname := goutmp.GetHost(addr.String())
+					//hname := goutmp.GetHost(addr.String())
+					hname := strings.Split(addr.String(), ":")[0]
 
 					log.Printf("[Running command for [%s@%s]]\n", rec.who, hname)
 					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), false, hc, chaffEnabled)
@@ -335,7 +337,8 @@ func main() {
 				} else if rec.op[0] == 's' {
 					// Interactive session
 					addr := hc.RemoteAddr()
-					hname := goutmp.GetHost(addr.String())
+					//hname := goutmp.GetHost(addr.String())
+					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running shell for [%s@%s]]\n", rec.who, hname)
 
 					utmpx := goutmp.Put_utmp(string(rec.who), hname)
