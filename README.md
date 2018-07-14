@@ -74,5 +74,7 @@ Running Clent and Server. In separate shells:
 * [A]$ sudo hkexshd/hkexshd &  # add -d for debugging
 * [B]$ hkexsh/hkexsh -u joebloggs # add -d for debugging
 
-NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' afterwards to fix up the shell tty afterwards as stty echo may not be restored if client crashes or is interrupted.
+NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' afterwards
+to fix up the shell tty afterwards as stty echo may not be restored if client crashes
+or is interrupted.
 
