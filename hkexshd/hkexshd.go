@@ -213,17 +213,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	if dbg {
-		log.SetOutput(os.Stdout)
-	} else {
-		log.SetOutput(ioutil.Discard)
-	}
-
 	{
 		me, e := user.Current()
 		if e != nil || me.Uid != "0" {
 			log.Fatal("Must run as root.")
 		}
+	}
+
+	if dbg {
+		log.SetOutput(os.Stdout)
+	} else {
+		log.SetOutput(ioutil.Discard)
 	}
 
 	// Listen on TCP port 2000 on all available unicast and
