@@ -202,10 +202,10 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
-	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts")
-	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
-	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
-	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
+	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts")
+	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt freq min (msecs)")
+	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt freq max (msecs)")
+	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt size max (bytes)")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 

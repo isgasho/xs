@@ -72,6 +72,10 @@ func main() {
 	var hAlg string
 	var server string
 	var cmdStr string
+
+	var copySrc string
+	var copyDst string
+
 	var altUser string
 	var authCookie string
 	var chaffEnabled bool
@@ -79,25 +83,47 @@ func main() {
 	var chaffFreqMax uint
 	var chaffBytesMax uint
 
+	var op []byte
 	isInteractive := false
 
 	flag.BoolVar(&vopt, "v", false, "show version")
+	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
-	flag.StringVar(&hAlg, "h", "H_SHA256", "hmac [\"H_SHA256\"]")
+	flag.StringVar(&hAlg, "m", "H_SHA256", "hmac [\"H_SHA256\"]")
 	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
-	flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
 	flag.StringVar(&altUser, "u", "", "specify alternate user")
 	flag.StringVar(&authCookie, "a", "", "auth cookie")
-	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts (default true)")
-	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
-	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
-	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
-	flag.BoolVar(&dbg, "d", false, "debug logging")
-	flag.Parse()
+	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
+	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt freq min (msecs)")
+	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt freq max (msecs)")
+	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt size max (bytes)")
+	
+	// Find out what program we are (shell or copier)
+	myPath := strings.Split(os.Args[0], string(os.PathSeparator))
+	if myPath[len(myPath)-1] != "hkexcp" {
+		// hkexsh accepts a command (-x) but not
+		// a srcpath (-r) or dstpath (-t)
+		flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
+		flag.Parse()
+	} else {
+		// hkexcp accepts srcpath (-r) and dstpath (-t), but not
+		// a command (-x)
+		flag.StringVar(&copySrc, "r", "", "copy srcpath")
+		flag.StringVar(&copyDst, "t", "", "copy dstpath")
+	}
+
+	if flag.NFlag() == 0 {
+		flag.Usage()
+		os.Exit(0)
+	}
 
 	if vopt {
 		fmt.Printf("version v%s\n", version)
 		os.Exit(0)
+	}
+
+	if len(cmdStr) != 0 && (len(copySrc) != 0 || len(copyDst) != 0) {
+		log.Fatal("incompatible options -- either cmd (-x) or copy ops (-r,-t), but not both")
 	}
 
 	if dbg {
@@ -136,17 +162,9 @@ func main() {
 		uname = altUser
 	}
 
-	var op []byte
 	if len(cmdStr) == 0 {
 		op = []byte{'s'}
 		isInteractive = true
-	} else if cmdStr == "-" {
-		op = []byte{'c'}
-		cmdStdin, err := ioutil.ReadAll(os.Stdin)
-		if err != nil {
-			panic(err)
-		}
-		cmdStr = strings.Trim(string(cmdStdin), "\r\n")
 	} else {
 		op = []byte{'c'}
 		// non-interactive cmds may complete quickly, so chaff earlier/faster
