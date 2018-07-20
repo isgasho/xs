@@ -44,39 +44,45 @@ const (
 
 /*---------------------------------------------------------------------*/
 
-type WinSize struct {
-	Rows uint16
-	Cols uint16
-}
+type (
+	WinSize struct {
+		Rows uint16
+		Cols uint16
+	}
 
-type ChaffConfig struct {
-	shutdown bool //set to inform chaffHelper to shut down
-	enabled  bool
-	msecsMin uint //msecs min interval
-	msecsMax uint //msecs max interval
-	szMax    uint // max size in bytes
-}
+	// chaffconfig captures attributes used to send chaff packets betwixt
+	// client and server connections, to obscure true traffic timing and
+	// patterns
+	// see: https://en.wikipedia.org/wiki/chaff_(countermeasure)
+	ChaffConfig struct {
+		shutdown bool //set to inform chaffHelper to shut down
+		enabled  bool
+		msecsMin uint //msecs min interval
+		msecsMax uint //msecs max interval
+		szMax    uint // max size in bytes
+	}
 
-// Conn is a HKex connection - a superset of net.Conn
-type Conn struct {
-	m          *sync.Mutex
-	c          net.Conn // which also implements io.Reader, io.Writer, ...
-	h          *hkex.HerraduraKEx
-	cipheropts uint32 // post-KEx cipher/hmac options
-	opts       uint32 // post-KEx protocol options (caller-defined)
-	WinCh      chan WinSize
-	Rows       uint16
-	Cols       uint16
+	// Conn is a HKex connection - a superset of net.Conn
+	Conn struct {
+		m          *sync.Mutex
+		c          net.Conn // which also implements io.Reader, io.Writer, ...
+		h          *hkex.HerraduraKEx
+		cipheropts uint32 // post-KEx cipher/hmac options
+		opts       uint32 // post-KEx protocol options (caller-defined)
+		WinCh      chan WinSize
+		Rows       uint16
+		Cols       uint16
 
-	chaff ChaffConfig
+		chaff ChaffConfig
 
-	closeStat *uint8        // close status (shell exit status: UNIX uint8)
-	r         cipher.Stream //read cipherStream
-	rm        hash.Hash
-	w         cipher.Stream //write cipherStream
-	wm        hash.Hash
-	dBuf      *bytes.Buffer //decrypt buffer for Read()
-}
+		closeStat *uint8        // close status (shell exit status: UNIX uint8)
+		r         cipher.Stream //read cipherStream
+		rm        hash.Hash
+		w         cipher.Stream //write cipherStream
+		wm        hash.Hash
+		dBuf      *bytes.Buffer //decrypt buffer for Read()
+	}
+)
 
 func (hc Conn) GetStatus() uint8 {
 	return *hc.closeStat
