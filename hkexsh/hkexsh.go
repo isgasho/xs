@@ -74,30 +74,27 @@ func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, i
 				fancyHostPortPath = strings.Split(fancyArg[1], ":")
 			}
 
+			// [...@]host[:port[:path]]
 			if len(fancyHostPortPath) > 2 {
-				// [user]@host[:port]:path
 				fancyPath = fancyHostPortPath[2]
-			}
-			if len(fancyHostPortPath) > 1 {
-				// [user]@host:port[:...] or [user]@host:path (default port)
+			} else if len(fancyHostPortPath) > 1 {
 				fancyPort = fancyHostPortPath[1]
 			}
-			// [user]@host[:...[:...]]
 			fancyHost = fancyHostPortPath[0]
 
 			if fancyPort == "" {
 				fancyPort = dp
 			}
 
-			//if fancyPath == "" {
-			//	fancyPath = "."
-			//}
+			if fancyPath == "" {
+				fancyPath = "."
+			}
 
 			if i == len(a)-1 {
 				isDest = true
 				fmt.Println("isDest")
 			}
-			//fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
+			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
 		} else {
 			otherArgs = append(otherArgs, a[i])
 		}
@@ -126,7 +123,7 @@ func main() {
 	var server string
 	var cmdStr string
 
-	var copySrc string
+	var copySrc []byte
 	var copyDst string
 
 	var altUser string
@@ -157,18 +154,19 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
-	} else {
-		// hkexcp accepts srcpath (-r) and dstpath (-t), but not
-		// a command (-x)
-		flag.StringVar(&copySrc, "r", "", "copy srcpath")
-		flag.StringVar(&copyDst, "t", "", "copy dstpath")
-	}
+	} // else {
+	//// hkexcp accepts srcpath (-r) and dstpath (-t), but not
+	//// a command (-x)
+	//flag.StringVar(&copySrc, "r", "", "copy srcpath")
+	//flag.StringVar(&copyDst, "t", "", "copy dstpath")
+	//}
 	flag.Parse()
 
 	fancyUser, fancyHost, fancyPort, fancyPath, pathIsDest, otherArgs :=
 		parseNonSwitchArgs(flag.Args(), defPort /* defPort */)
 	fmt.Println("otherArgs:", otherArgs)
 	//fmt.Println("fancyHost:", fancyHost)
+	fmt.Println("fancyPath:", fancyPath)
 	if fancyUser != "" {
 		altUser = fancyUser
 	}
@@ -177,10 +175,20 @@ func main() {
 		//fmt.Println("fancyHost sets server to", server)
 	}
 	if fancyPath != "" {
+		// -if pathIsSrc && len(otherArgs) > 1 ERROR
+		// -else flatten otherArgs into space-delim list => copySrc
 		if pathIsDest {
+			for _, v := range otherArgs {
+				copySrc = append(copySrc, ' ')
+				copySrc = append(copySrc, v...)
+			}
+			fmt.Println(">> copySrc:", string(copySrc))
 			copyDst = fancyPath
 		} else {
-			copySrc = fancyPath
+			if len(otherArgs) > 1 {
+				log.Fatal("ERROR: cannot specify more than one dest path for copy")
+			}
+			copySrc = []byte(fancyPath)
 		}
 	}
 
@@ -197,7 +205,7 @@ func main() {
 	}
 
 	if len(cmdStr) != 0 && (len(copySrc) != 0 || len(copyDst) != 0) {
-		log.Fatal("incompatible options -- either cmd (-x) or copy ops (-r,-t), but not both")
+		log.Fatal("incompatible options -- either cmd (-x) or copy ops but not both")
 	}
 
 	if dbg {
