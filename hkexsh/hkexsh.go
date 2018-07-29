@@ -53,14 +53,14 @@ func GetSize() (cols, rows int, err error) {
 	return
 }
 
-func parseFancyEndpointArg(a []string, dp string) (user, host, port, path string) {
+func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, isDest bool, otherArgs []string) {
 	//TODO: Look for non-option fancyArg of syntax user@host:filespec to set -r,-t and -u
 	//  Consider: whether fancyArg is src or dst file depends on flag.Args() index;
 	//            fancyArg as last flag.Args() element denotes dstFile
 	//            fancyArg as not-last flag.Args() element denotes srcFile
 	//            * throw error if >1 fancyArgs are found in flags.Args()
 	var fancyUser, fancyHost, fancyPort, fancyPath string
-	for i, arg := range flag.Args() {
+	for i, arg := range a {
 		if strings.Contains(arg, ":") || strings.Contains(arg, "@") {
 			fancyArg := strings.Split(flag.Arg(i), "@")
 			var fancyHostPortPath []string
@@ -89,15 +89,20 @@ func parseFancyEndpointArg(a []string, dp string) (user, host, port, path string
 				fancyPort = dp
 			}
 
-			if fancyPath == "" {
-				fancyPath = "."
-			}
+			//if fancyPath == "" {
+			//	fancyPath = "."
+			//}
 
-			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
-			break // ignore multiple 'fancyArgs'
+			if i == len(a)-1 {
+				isDest = true
+				fmt.Println("isDest")
+			}
+			//fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
+		} else {
+			otherArgs = append(otherArgs, a[i])
 		}
 	}
-	return fancyUser, fancyHost, fancyPort, fancyPath
+	return fancyUser, fancyHost, fancyPort, fancyPath, isDest, otherArgs
 }
 
 // Demo of a simple client that dials up to a simple test server to
@@ -160,21 +165,26 @@ func main() {
 	}
 	flag.Parse()
 
-	fancyUser, fancyHost, fancyPort, fancyPath := parseFancyEndpointArg(flag.Args(), defPort /* defPort */)
-	fmt.Println("fancyHost:", fancyHost)
+	fancyUser, fancyHost, fancyPort, fancyPath, pathIsDest, otherArgs :=
+		parseNonSwitchArgs(flag.Args(), defPort /* defPort */)
+	fmt.Println("otherArgs:", otherArgs)
+	//fmt.Println("fancyHost:", fancyHost)
 	if fancyUser != "" {
 		altUser = fancyUser
 	}
 	if fancyHost != "" {
 		server = fancyHost + ":" + fancyPort
-		fmt.Println("fancyHost sets server to", server)
+		//fmt.Println("fancyHost sets server to", server)
 	}
 	if fancyPath != "" {
-		//TODO: srcPath or dstPath depends on other flag.Args
-		copyDst = fancyPath
+		if pathIsDest {
+			copyDst = fancyPath
+		} else {
+			copySrc = fancyPath
+		}
 	}
 
-	fmt.Println("server finally is:", server)
+	//fmt.Println("server finally is:", server)
 
 	if flag.NFlag() == 0 && server == "" {
 		flag.Usage()
