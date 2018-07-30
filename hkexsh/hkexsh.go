@@ -34,7 +34,8 @@ type cmdSpec struct {
 }
 
 var (
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	defPort = "2000"
 )
 
 // Get terminal size using 'stty' command
@@ -50,6 +51,55 @@ func GetSize() (cols, rows int, err error) {
 		fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
 	}
 	return
+}
+
+func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, isDest bool, otherArgs []string) {
+	//TODO: Look for non-option fancyArg of syntax user@host:filespec to set -r,-t and -u
+	//  Consider: whether fancyArg is src or dst file depends on flag.Args() index;
+	//            fancyArg as last flag.Args() element denotes dstFile
+	//            fancyArg as not-last flag.Args() element denotes srcFile
+	//            * throw error if >1 fancyArgs are found in flags.Args()
+	var fancyUser, fancyHost, fancyPort, fancyPath string
+	for i, arg := range a {
+		if strings.Contains(arg, ":") || strings.Contains(arg, "@") {
+			fancyArg := strings.Split(flag.Arg(i), "@")
+			var fancyHostPortPath []string
+			if len(fancyArg) < 2 {
+				//TODO: no user specified, use current
+				fancyUser = "[default:getUser]"
+				fancyHostPortPath = strings.Split(fancyArg[0], ":")
+			} else {
+				// user@....
+				fancyUser = fancyArg[0]
+				fancyHostPortPath = strings.Split(fancyArg[1], ":")
+			}
+
+			// [...@]host[:port[:path]]
+			if len(fancyHostPortPath) > 2 {
+				fancyPath = fancyHostPortPath[2]
+			} else if len(fancyHostPortPath) > 1 {
+				fancyPort = fancyHostPortPath[1]
+			}
+			fancyHost = fancyHostPortPath[0]
+
+			if fancyPort == "" {
+				fancyPort = dp
+			}
+
+			if fancyPath == "" {
+				fancyPath = "."
+			}
+
+			if i == len(a)-1 {
+				isDest = true
+				fmt.Println("isDest")
+			}
+			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
+		} else {
+			otherArgs = append(otherArgs, a[i])
+		}
+	}
+	return fancyUser, fancyHost, fancyPort, fancyPath, isDest, otherArgs
 }
 
 // Demo of a simple client that dials up to a simple test server to
@@ -73,7 +123,7 @@ func main() {
 	var server string
 	var cmdStr string
 
-	var copySrc string
+	var copySrc []byte
 	var copyDst string
 
 	var altUser string
@@ -90,29 +140,61 @@ func main() {
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "m", "H_SHA256", "hmac [\"H_SHA256\"]")
-	flag.StringVar(&server, "s", "localhost:2000", "server hostname/address[:port]")
+	flag.StringVar(&server, "s", "localhost:"+defPort, "server hostname/address[:port]")
 	flag.StringVar(&altUser, "u", "", "specify alternate user")
 	flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
 	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt freq min (msecs)")
 	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt freq max (msecs)")
 	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt size max (bytes)")
-	
+
 	// Find out what program we are (shell or copier)
 	myPath := strings.Split(os.Args[0], string(os.PathSeparator))
-	if myPath[len(myPath)-1] != "hkexcp" {
+	if myPath[len(myPath)-1] != "hkexcp" && myPath[len(myPath)-1] != "hkexcp.exe" {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
-		flag.Parse()
-	} else {
-		// hkexcp accepts srcpath (-r) and dstpath (-t), but not
-		// a command (-x)
-		flag.StringVar(&copySrc, "r", "", "copy srcpath")
-		flag.StringVar(&copyDst, "t", "", "copy dstpath")
+	} // else {
+	//// hkexcp accepts srcpath (-r) and dstpath (-t), but not
+	//// a command (-x)
+	//flag.StringVar(&copySrc, "r", "", "copy srcpath")
+	//flag.StringVar(&copyDst, "t", "", "copy dstpath")
+	//}
+	flag.Parse()
+
+	fancyUser, fancyHost, fancyPort, fancyPath, pathIsDest, otherArgs :=
+		parseNonSwitchArgs(flag.Args(), defPort /* defPort */)
+	fmt.Println("otherArgs:", otherArgs)
+	//fmt.Println("fancyHost:", fancyHost)
+	fmt.Println("fancyPath:", fancyPath)
+	if fancyUser != "" {
+		altUser = fancyUser
+	}
+	if fancyHost != "" {
+		server = fancyHost + ":" + fancyPort
+		//fmt.Println("fancyHost sets server to", server)
+	}
+	if fancyPath != "" {
+		// -if pathIsSrc && len(otherArgs) > 1 ERROR
+		// -else flatten otherArgs into space-delim list => copySrc
+		if pathIsDest {
+			for _, v := range otherArgs {
+				copySrc = append(copySrc, ' ')
+				copySrc = append(copySrc, v...)
+			}
+			fmt.Println(">> copySrc:", string(copySrc))
+			copyDst = fancyPath
+		} else {
+			if len(otherArgs) > 1 {
+				log.Fatal("ERROR: cannot specify more than one dest path for copy")
+			}
+			copySrc = []byte(fancyPath)
+		}
 	}
 
-	if flag.NFlag() == 0 {
+	//fmt.Println("server finally is:", server)
+
+	if flag.NFlag() == 0 && server == "" {
 		flag.Usage()
 		os.Exit(0)
 	}
@@ -123,7 +205,7 @@ func main() {
 	}
 
 	if len(cmdStr) != 0 && (len(copySrc) != 0 || len(copyDst) != 0) {
-		log.Fatal("incompatible options -- either cmd (-x) or copy ops (-r,-t), but not both")
+		log.Fatal("incompatible options -- either cmd (-x) or copy ops but not both")
 	}
 
 	if dbg {
