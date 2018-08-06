@@ -302,14 +302,15 @@ func main() {
 	conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 	if chaffEnabled {
 		conn.EnableChaff()
-		//defer conn.DisableChaff()
-		//defer conn.ShutdownChaff()
+		defer conn.DisableChaff()
+		defer conn.ShutdownChaff()
 	}
 
 	//client reader (from server) goroutine
 	//Read remote end's stdout
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// By deferring a call to wg.Done(),
 		// each goroutine guarantees that it marks
 		// its direction's stream as finished.
@@ -330,7 +331,6 @@ func main() {
 			log.Println("[* Got EOF *]")
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 		}
-		wg.Done()
 	}()
 
 	// Only look for data from stdin to send to remote end
@@ -343,6 +343,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			//!defer wg.Done()
 			// Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
@@ -358,15 +359,15 @@ func main() {
 				os.Exit(255)
 			}
 			log.Println("[Sent EOF]")
-			wg.Done()
 		}()
 	}
 
 	// Wait until both stdin and stdout goroutines finish
+	// ** IMPORTANT! This must come before the Restore() tty call below
+	// in order to maintain raw mode for interactive sessions. -rlm 20180805
 	wg.Wait()
-	conn.DisableChaff()
-	conn.ShutdownChaff()
-
+	
 	_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+
 	os.Exit(rec.status)
 }
