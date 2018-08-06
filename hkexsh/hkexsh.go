@@ -30,7 +30,7 @@ type cmdSpec struct {
 	who        []byte
 	cmd        []byte
 	authCookie []byte
-	status     int // though UNIX shell exit status is uint8, os.Exit() wants int
+	status     int // UNIX exit status is uint8, but os.Exit() wants int
 }
 
 var (
@@ -86,13 +86,13 @@ func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, i
 				fancyPort = dp
 			}
 
-			if fancyPath == "" {
-				fancyPath = "."
-			}
+			//if fancyPath == "" {
+			//	fancyPath = "."
+			//}
 
 			if i == len(a)-1 {
 				isDest = true
-				fmt.Println("isDest")
+				fmt.Println("remote path isDest")
 			}
 			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
 		} else {
@@ -118,6 +118,7 @@ func main() {
 	version := "0.1pre (NO WARRANTY)"
 	var vopt bool
 	var dbg bool
+	var shellMode bool // if true act as shell, else file copier
 	var cAlg string
 	var hAlg string
 	var server string
@@ -154,6 +155,7 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
+		shellMode = true
 	} // else {
 	//// hkexcp accepts srcpath (-r) and dstpath (-t), but not
 	//// a command (-x)
@@ -162,19 +164,19 @@ func main() {
 	//}
 	flag.Parse()
 
-	fancyUser, fancyHost, fancyPort, fancyPath, pathIsDest, otherArgs :=
+	tmpUser, tmpHost, tmpPort, tmpPath, pathIsDest, otherArgs :=
 		parseNonSwitchArgs(flag.Args(), defPort /* defPort */)
 	fmt.Println("otherArgs:", otherArgs)
-	//fmt.Println("fancyHost:", fancyHost)
-	fmt.Println("fancyPath:", fancyPath)
-	if fancyUser != "" {
-		altUser = fancyUser
+	//fmt.Println("tmpHost:", tmpHost)
+	//fmt.Println("tmpPath:", tmpPath)
+	if tmpUser != "" {
+		altUser = tmpUser
 	}
-	if fancyHost != "" {
-		server = fancyHost + ":" + fancyPort
-		//fmt.Println("fancyHost sets server to", server)
+	if tmpHost != "" {
+		server = tmpHost + ":" + tmpPort
+		//fmt.Println("tmpHost sets server to", server)
 	}
-	if fancyPath != "" {
+	if tmpPath != "" {
 		// -if pathIsSrc && len(otherArgs) > 1 ERROR
 		// -else flatten otherArgs into space-delim list => copySrc
 		if pathIsDest {
@@ -183,17 +185,18 @@ func main() {
 				copySrc = append(copySrc, v...)
 			}
 			fmt.Println(">> copySrc:", string(copySrc))
-			copyDst = fancyPath
+			copyDst = tmpPath
 		} else {
 			if len(otherArgs) > 1 {
 				log.Fatal("ERROR: cannot specify more than one dest path for copy")
 			}
-			copySrc = []byte(fancyPath)
+			copySrc = []byte(tmpPath)
 		}
 	}
 
-	//fmt.Println("server finally is:", server)
+	// Do some more option consistency checks
 
+	//fmt.Println("server finally is:", server)
 	if flag.NFlag() == 0 && server == "" {
 		flag.Usage()
 		os.Exit(0)
@@ -208,10 +211,31 @@ func main() {
 		log.Fatal("incompatible options -- either cmd (-x) or copy ops but not both")
 	}
 
+	//-------------------------------------------------------------------
+	// Here we have parsed all options and can now carry out
+	// either the shell session or copy operation.
+	_ = shellMode
+
 	if dbg {
 		log.SetOutput(os.Stdout)
 	} else {
 		log.SetOutput(ioutil.Discard)
+	}
+
+	// We must make the decision about interactivity before Dial()
+	// as it affects chaffing behaviour. 20180805
+	if len(cmdStr) == 0 {
+		op = []byte{'s'}
+		isInteractive = true
+	} else {
+		op = []byte{'c'}
+		// non-interactive cmds may complete quickly, so chaff earlier/faster
+		// to help ensure there's some cover to the brief traffic.
+		// (ignoring cmdline values)
+		//!DEBUG
+		//chaffEnabled = false
+		chaffFreqMin = 2
+		chaffFreqMax = 10
 	}
 
 	conn, err := hkexnet.Dial("tcp", server, cAlg, hAlg)
@@ -226,14 +250,16 @@ func main() {
 	// TODO: send flag to server side indicating this
 	//  affects shell command used
 	var oldState *hkexsh.State
-	if isatty.IsTerminal(os.Stdin.Fd()) {
-		oldState, err = hkexsh.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			panic(err)
+	if shellMode {
+		if isatty.IsTerminal(os.Stdin.Fd()) {
+			oldState, err = hkexsh.MakeRaw(int(os.Stdin.Fd()))
+			if err != nil {
+				panic(err)
+			}
+			defer func() { _ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
+		} else {
+			log.Println("NOT A TTY")
 		}
-		defer func() { _ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
-	} else {
-		log.Println("NOT A TTY")
 	}
 
 	var uname string
@@ -242,18 +268,6 @@ func main() {
 		uname = u.Username
 	} else {
 		uname = altUser
-	}
-
-	if len(cmdStr) == 0 {
-		op = []byte{'s'}
-		isInteractive = true
-	} else {
-		op = []byte{'c'}
-		// non-interactive cmds may complete quickly, so chaff earlier/faster
-		// to help ensure there's some cover to the brief traffic.
-		// (ignoring cmdline values)
-		chaffFreqMin = 2
-		chaffFreqMax = 10
 	}
 
 	if len(authCookie) == 0 {
@@ -288,32 +302,25 @@ func main() {
 	conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 	if chaffEnabled {
 		conn.EnableChaff()
+		//defer conn.DisableChaff()
+		//defer conn.ShutdownChaff()
 	}
-	defer conn.DisableChaff()
-	defer conn.ShutdownChaff()
 
 	//client reader (from server) goroutine
+	//Read remote end's stdout
 	wg.Add(1)
 	go func() {
 		// By deferring a call to wg.Done(),
 		// each goroutine guarantees that it marks
 		// its direction's stream as finished.
-		//
-		// Whichever direction's goroutine finishes first
-		// will call wg.Done() once more, explicitly, to
-		// hang up on the other side, so that this client
-		// exits immediately on an EOF from either side.
-		defer wg.Done()
 
-		// io.Copy() expects EOF so this will
+		// io.Copy() expects EOF so normally this will
 		// exit with inerr == nil
 		_, inerr := io.Copy(os.Stdout, conn)
 		if inerr != nil {
-			if inerr.Error() != "EOF" {
-				fmt.Println(inerr)
-				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-				os.Exit(1)
-			}
+			fmt.Println(inerr)
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+			os.Exit(1)
 		}
 
 		rec.status = int(conn.GetStatus())
@@ -322,41 +329,43 @@ func main() {
 		if isInteractive {
 			log.Println("[* Got EOF *]")
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-			wg.Done()
-			//os.Exit(rec.status)
 		}
+		wg.Done()
 	}()
 
+	// Only look for data from stdin to send to remote end
+	// for interactive sessions.
 	if isInteractive {
 		handleTermResizes(conn)
 
 		// client writer (to server) goroutine
+		// Write local stdin to remote end
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
 			// Copy() expects EOF so this will
 			// exit with outerr == nil
 			//!_, outerr := io.Copy(conn, os.Stdin)
 			_, outerr := func(conn *hkexnet.Conn, r io.Reader) (w int64, e error) {
-				return io.Copy(conn, r)
+				w, e = io.Copy(conn, r)
+				return w, e
 			}(conn, os.Stdin)
 
 			if outerr != nil {
 				log.Println(outerr)
-				if outerr.Error() != "EOF" {
-					fmt.Println(outerr)
-					_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-					os.Exit(255)
-				}
+				fmt.Println(outerr)
+				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+				os.Exit(255)
 			}
 			log.Println("[Sent EOF]")
-			wg.Done() // client hung up, close WaitGroup to exit client
+			wg.Done()
 		}()
 	}
 
 	// Wait until both stdin and stdout goroutines finish
 	wg.Wait()
+	conn.DisableChaff()
+	conn.ShutdownChaff()
 
 	_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 	os.Exit(rec.status)

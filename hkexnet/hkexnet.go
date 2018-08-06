@@ -439,7 +439,12 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			log.Printf("[TermSize pkt: rows %v cols %v]\n", hc.Rows, hc.Cols)
 			hc.WinCh <- WinSize{hc.Rows, hc.Cols}
 		} else if ctrlStatOp == CSOExitStatus {
-			*hc.closeStat = uint8(payloadBytes[0])
+			if len(payloadBytes) > 0 {
+				*hc.closeStat = uint8(payloadBytes[0])
+			} else {
+				log.Println("[truncated payload, cannot determine CSOExitStatus]")
+				*hc.closeStat = 99
+			}
 		} else {
 			hc.dBuf.Write(payloadBytes)
 			//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
@@ -450,10 +455,14 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		hTmp := hc.rm.Sum(nil)[0:4]
 		log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
-		// Log alert if hmac didn't match, corrupted channel
-		if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
-			fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
-			_, _ = hc.c.Write([]byte{CSOHmacInvalid})
+		if *hc.closeStat == 99 {
+			log.Println("[cannot verify HMAC]")
+		} else {
+			// Log alert if hmac didn't match, corrupted channel
+			if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
+				fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
+				_, _ = hc.c.Write([]byte{CSOHmacInvalid})
+			}
 		}
 	}
 

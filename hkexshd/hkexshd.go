@@ -18,6 +18,7 @@ import (
 	"os/user"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 
 	"blitter.com/go/goutmp"
@@ -83,6 +84,7 @@ func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
 //
 // Uses ptys to support commands which expect a terminal.
 func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus int) {
+	var wg sync.WaitGroup
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -135,15 +137,16 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 				log.Printf("[Setting term size to: %v %v]\n", sz.Rows, sz.Cols)
 				pty.Setsize(ptmx, &pty.Winsize{Rows: sz.Rows, Cols: sz.Cols})
 			}
+			fmt.Println("*** WinCh goroutine done ***")
 		}()
 
 		// Copy stdin to the pty.. (bgnd goroutine)
 		go func() {
 			_, e := io.Copy(ptmx, conn)
 			if e != nil {
-				log.Printf("** std->pty ended **\n")
-				return
+				log.Println("** stdin->pty ended **:", e.Error())
 			}
+			fmt.Println("*** stdin->pty goroutine done ***")
 		}()
 
 		if chaffing {
@@ -153,17 +156,26 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 		defer conn.ShutdownChaff()
 
 		// ..and the pty to stdout.
+		// This may take some time exceeding that of the
+		// actual command's lifetime, so the c.Wait() below
+		// must synchronize with the completion of this goroutine
+		// to ensure all stdout data gets to the client before
+		// connection is closed.
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			_, e := io.Copy(conn, ptmx)
 			if e != nil {
-				log.Printf("** pty->stdout ended **\n")
-				return
+				log.Println("** pty->stdout ended **:", e.Error())
+				//wg.Done() //!return
 			}
 			// The above io.Copy() will exit when the command attached
 			// to the pty exits
+			fmt.Println("*** pty->stdout goroutine done ***")
 		}()
 
 		if err := c.Wait(); err != nil {
+				fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				// The program has exited with an exit code != 0
 
@@ -177,6 +189,9 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 				}
 			}
 		}
+		wg.Wait() // Wait on pty->stdout completion to client
+		//conn.DisableChaff()
+		//conn.ShutdownChaff()
 	}
 	return
 }
