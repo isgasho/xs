@@ -54,11 +54,9 @@ func GetSize() (cols, rows int, err error) {
 }
 
 func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, isDest bool, otherArgs []string) {
-	//TODO: Look for non-option fancyArg of syntax user@host:filespec to set -r,-t and -u
-	//  Consider: whether fancyArg is src or dst file depends on flag.Args() index;
-	//            fancyArg as last flag.Args() element denotes dstFile
-	//            fancyArg as not-last flag.Args() element denotes srcFile
-	//            * throw error if >1 fancyArgs are found in flags.Args()
+	// Whether fancyArg is src or dst file depends on flag.Args() index;
+	//  fancyArg as last flag.Args() element denotes dstFile
+	//  fancyArg as not-last flag.Args() element denotes srcFile
 	var fancyUser, fancyHost, fancyPort, fancyPath string
 	for i, arg := range a {
 		if strings.Contains(arg, ":") || strings.Contains(arg, "@") {
@@ -102,8 +100,82 @@ func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, i
 	return fancyUser, fancyHost, fancyPort, fancyPath, isDest, otherArgs
 }
 
-// Demo of a simple client that dials up to a simple test server to
-// send data.
+// doCopyMode begins a secure hkexsh local<->remote file copy operation.
+func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, rec *cmdSpec) {
+	// TODO: Bring in runShellAs(), stripped down, from hkexshd
+	// and build either side of tar pipeline: names?
+	// runTarSrc(), runTarSink() ?
+	if remoteDest {
+		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
+	} else {
+		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
+	}
+}
+
+// doShellMode begins an hkexsh shell session (one-shot command or interactive).
+func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State, rec *cmdSpec) {
+	//client reader (from server) goroutine
+	//Read remote end's stdout
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// By deferring a call to wg.Done(),
+		// each goroutine guarantees that it marks
+		// its direction's stream as finished.
+
+		// io.Copy() expects EOF so normally this will
+		// exit with inerr == nil
+		_, inerr := io.Copy(os.Stdout, conn)
+		if inerr != nil {
+			fmt.Println(inerr)
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+			os.Exit(1)
+		}
+
+		rec.status = int(conn.GetStatus())
+		log.Println("rec.status:", rec.status)
+
+		if isInteractive {
+			log.Println("[* Got EOF *]")
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+		}
+	}()
+
+	// Only look for data from stdin to send to remote end
+	// for interactive sessions.
+	if isInteractive {
+		handleTermResizes(conn)
+
+		// client writer (to server) goroutine
+		// Write local stdin to remote end
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			//!defer wg.Done()
+			// Copy() expects EOF so this will
+			// exit with outerr == nil
+			//!_, outerr := io.Copy(conn, os.Stdin)
+			_, outerr := func(conn *hkexnet.Conn, r io.Reader) (w int64, e error) {
+				w, e = io.Copy(conn, r)
+				return w, e
+			}(conn, os.Stdin)
+
+			if outerr != nil {
+				log.Println(outerr)
+				fmt.Println(outerr)
+				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+				os.Exit(255)
+			}
+			log.Println("[Sent EOF]")
+		}()
+	}
+
+	// Wait until both stdin and stdout goroutines finish before returning
+	// (ensure client gets all data from server before closing)
+	wg.Wait()
+}
+
+// hkexsh - a client for secure shell and file copy operations.
 //
 // While conforming to the basic net.Conn interface HKex.Conn has extra
 // capabilities designed to allow apps to define connection options,
@@ -124,6 +196,7 @@ func main() {
 	var server string
 	var cmdStr string
 
+	var recursiveCopy bool
 	var copySrc []byte
 	var copyDst string
 
@@ -156,12 +229,10 @@ func main() {
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
 		shellMode = true
-	} // else {
-	//// hkexcp accepts srcpath (-r) and dstpath (-t), but not
-	//// a command (-x)
-	//flag.StringVar(&copySrc, "r", "", "copy srcpath")
-	//flag.StringVar(&copyDst, "t", "", "copy dstpath")
-	//}
+	} else {
+		// Note: only makes sense for client->server copies
+		flag.BoolVar(&recursiveCopy, "r", false, "recursive copy/preserve tree copy")
+	}
 	flag.Parse()
 
 	tmpUser, tmpHost, tmpPort, tmpPath, pathIsDest, otherArgs :=
@@ -176,21 +247,35 @@ func main() {
 		server = tmpHost + ":" + tmpPort
 		//fmt.Println("tmpHost sets server to", server)
 	}
-	if tmpPath != "" {
+
+	var fileArgs string
+	if !shellMode && tmpPath != "" {
 		// -if pathIsSrc && len(otherArgs) > 1 ERROR
 		// -else flatten otherArgs into space-delim list => copySrc
 		if pathIsDest {
-			for _, v := range otherArgs {
-				copySrc = append(copySrc, ' ')
-				copySrc = append(copySrc, v...)
+			if len(otherArgs) == 0 {
+				log.Fatal("ERROR: Must specify at least one src path for copy")
+			} else {
+				for _, v := range otherArgs {
+					copySrc = append(copySrc, ' ')
+					copySrc = append(copySrc, v...)
+				}
+				copyDst = tmpPath
+				fileArgs = string(copySrc)
 			}
-			fmt.Println(">> copySrc:", string(copySrc))
-			copyDst = tmpPath
-		} else {
-			if len(otherArgs) > 1 {
+	} else {
+			if len(otherArgs) == 0 {
+				log.Fatal("ERROR: Must specify dest path for copy")
+			} else if len(otherArgs) == 1 {
+				copyDst = otherArgs[0]
+				if strings.Contains(copyDst, "*") || strings.Contains(copyDst, "?") {
+					log.Fatal("ERROR: wildcards not allowed in dest path for copy")
+				}
+			} else {
 				log.Fatal("ERROR: cannot specify more than one dest path for copy")
 			}
 			copySrc = []byte(tmpPath)
+			fileArgs = copyDst
 		}
 	}
 
@@ -222,20 +307,39 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	// We must make the decision about interactivity before Dial()
-	// as it affects chaffing behaviour. 20180805
-	if len(cmdStr) == 0 {
-		op = []byte{'s'}
-		isInteractive = true
+	if shellMode {
+		// We must make the decision about interactivity before Dial()
+		// as it affects chaffing behaviour. 20180805
+		if len(cmdStr) == 0 {
+			op = []byte{'s'}
+			isInteractive = true
+		} else {
+			op = []byte{'c'}
+			// non-interactive cmds may complete quickly, so chaff earlier/faster
+			// to help ensure there's some cover to the brief traffic.
+			// (ignoring cmdline values)
+			chaffFreqMin = 2
+			chaffFreqMax = 10
+		}
 	} else {
-		op = []byte{'c'}
-		// non-interactive cmds may complete quickly, so chaff earlier/faster
-		// to help ensure there's some cover to the brief traffic.
-		// (ignoring cmdline values)
-		//!DEBUG
-		//chaffEnabled = false
+		// as copy mode is also non-interactive, set up chaffing
+		// just like the 'c' mode above
 		chaffFreqMin = 2
 		chaffFreqMax = 10
+
+		if pathIsDest {
+			// client->server file copy
+			// src file list is in copySrc
+			op = []byte{'D'}
+			fmt.Println("client->server copy:", string(copySrc), "->", copyDst)
+			cmdStr = copyDst
+		} else {
+			// server->client file copy
+			// remote src file(s) in copyDsr
+			op = []byte{'S'}
+			fmt.Println("server->client copy:", string(copySrc), "->", copyDst)
+			cmdStr = string(copySrc)
+		}
 	}
 
 	conn, err := hkexnet.Dial("tcp", server, cAlg, hAlg)
@@ -306,68 +410,15 @@ func main() {
 		defer conn.ShutdownChaff()
 	}
 
-	//client reader (from server) goroutine
-	//Read remote end's stdout
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		// By deferring a call to wg.Done(),
-		// each goroutine guarantees that it marks
-		// its direction's stream as finished.
-
-		// io.Copy() expects EOF so normally this will
-		// exit with inerr == nil
-		_, inerr := io.Copy(os.Stdout, conn)
-		if inerr != nil {
-			fmt.Println(inerr)
-			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-			os.Exit(1)
-		}
-
-		rec.status = int(conn.GetStatus())
-		log.Println("rec.status:", rec.status)
-
-		if isInteractive {
-			log.Println("[* Got EOF *]")
-			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-		}
-	}()
-
-	// Only look for data from stdin to send to remote end
-	// for interactive sessions.
-	if isInteractive {
-		handleTermResizes(conn)
-
-		// client writer (to server) goroutine
-		// Write local stdin to remote end
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			//!defer wg.Done()
-			// Copy() expects EOF so this will
-			// exit with outerr == nil
-			//!_, outerr := io.Copy(conn, os.Stdin)
-			_, outerr := func(conn *hkexnet.Conn, r io.Reader) (w int64, e error) {
-				w, e = io.Copy(conn, r)
-				return w, e
-			}(conn, os.Stdin)
-
-			if outerr != nil {
-				log.Println(outerr)
-				fmt.Println(outerr)
-				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-				os.Exit(255)
-			}
-			log.Println("[Sent EOF]")
-		}()
+	if shellMode {
+		doShellMode(isInteractive, conn, oldState, rec)
+	} else {
+		doCopyMode(conn, pathIsDest, fileArgs, recursiveCopy, rec)
 	}
 
-	// Wait until both stdin and stdout goroutines finish
-	// ** IMPORTANT! This must come before the Restore() tty call below
-	// in order to maintain raw mode for interactive sessions. -rlm 20180805
-	wg.Wait()
-	
-	_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+	if oldState != nil {
+		_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+	}
 
 	os.Exit(rec.status)
 }

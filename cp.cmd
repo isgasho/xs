@@ -9,3 +9,4 @@ tar -cz -f - testdir/sub1/bar.txt | \
 # (in the absence of --xform=.. above, files and dirs will all be extracted
 # to remote DEST preserving tree structure.)
 
+tar cf /dev/stdout ../*.txt | tar xf -

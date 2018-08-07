@@ -202,7 +202,6 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 
 	hc.r, hc.rm, err = hc.getStream(hc.h.FA())
 	hc.w, hc.wm, err = hc.getStream(hc.h.FA())
-
 	*hc.closeStat = 99 // open or prematurely-closed status
 	return
 }
@@ -455,7 +454,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		hTmp := hc.rm.Sum(nil)[0:4]
 		log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
-		if *hc.closeStat >90 {
+		if *hc.closeStat > 90 {
 			log.Println("[cannot verify HMAC]")
 		} else {
 			// Log alert if hmac didn't match, corrupted channel

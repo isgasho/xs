@@ -175,7 +175,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 		}()
 
 		if err := c.Wait(); err != nil {
-				fmt.Println("*** c.Wait() done ***")
+			fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				// The program has exited with an exit code != 0
 
@@ -369,6 +369,16 @@ func main() {
 						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 						hc.SetStatus(uint8(cmdStatus))
 					}
+				} else if rec.op[0] == 'D' {
+					// File copy (destination) operation - client copy to server
+					log.Printf("[Client->Server copy]\n")
+					// TODO: call function with hc, rec.cmd, chaffEnabled etc.
+					// func hooks tar cmd right-half of pipe to hc Reader
+				} else if rec.op[0] == 'S' {
+					// File copy (src) operation - server copy to client
+					log.Printf("[Server->Client copy]\n")
+					// TODO: call function to copy rec.cmd (file list) to
+					// tar cmd left-half of pipeline to hc.Writer ?
 				} else {
 					log.Println("[Bad cmdSpec]")
 				}
