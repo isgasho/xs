@@ -107,8 +107,10 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 	// runTarSrc(), runTarSink() ?
 	if remoteDest {
 		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
+		fmt.Fprintf(conn, "copyMode remoteDest TODO\n")
 	} else {
 		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
+		fmt.Fprintf(conn, "copyMode localDest TODO\n")
 	}
 }
 
@@ -263,7 +265,7 @@ func main() {
 				copyDst = tmpPath
 				fileArgs = string(copySrc)
 			}
-	} else {
+		} else {
 			if len(otherArgs) == 0 {
 				log.Fatal("ERROR: Must specify dest path for copy")
 			} else if len(otherArgs) == 1 {

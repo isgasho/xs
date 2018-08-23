@@ -37,48 +37,140 @@ type cmdSpec struct {
 }
 
 /* -------------------------------------------------------------- */
-
-/*
- // Run a command (via os.exec) as a specific user
-//
-// Uses ptys to support commands which expect a terminal.
-func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
+// Perform a client->server copy
+func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, chaffing bool) (err error, exitStatus int) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
 	fmt.Sscanf(u.Gid, "%d", &gid)
-	fmt.Println("uid:", uid, "gid:", gid)
+	log.Println("uid:", uid, "gid:", gid)
 
-	args := strings.Split(cmd, " ")
-	arg0 := args[0]
-	args = args[1:]
-	c := exec.Command(arg0, args...)
+	// Need to clear server's env and set key vars of the
+	// target user. This isn't perfect (TERM doesn't seem to
+	// work 100%; ANSI/xterm colour isn't working even
+	// if we set "xterm" or "ansi" here; and line count
+	// reported by 'stty -a' defaults to 24 regardless
+	// of client shell window used to run client.
+	// Investigate -- rlm 2018-01-26)
+	os.Clearenv()
+	os.Setenv("HOME", u.HomeDir)
+	os.Setenv("TERM", "vt102") // TODO: server or client option?
+
+	var c *exec.Cmd
+	cmdName := "/bin/tar"
+	// NOTE the lack of quotes around --xform option's sed expression.
+	// When args are passed in exec() format, no quoting is required
+	// (as this isn't input from a shell) (right? -rlm 20180823)
+	cmdArgs := []string{"-xzv", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
+	c = exec.Command(cmdName, cmdArgs...)
+
+	//If os.Clearenv() isn't called by server above these will be seen in the
+	//client's session env.
+	//c.Env = []string{"HOME=" + u.HomeDir, "SUDO_GID=", "SUDO_UID=", "SUDO_USER=", "SUDO_COMMAND=", "MAIL=", "LOGNAME="+who}
+	c.Dir = u.HomeDir
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdin = conn
 	c.Stdout = conn
 	c.Stderr = conn
 
-	// Start the command with a pty.
-	ptmx, err := pty.Start(c) // returns immediately with ptmx file
-	if err != nil {
-		return err
-	}
-	// Make sure to close the pty at the end.
-	defer func() { _ = ptmx.Close() }() // Best effort.
-	// Copy stdin to the pty and the pty to stdout.
-	go func() { _, _ = io.Copy(ptmx, conn) }()
-	_, _ = io.Copy(conn, ptmx)
-
-	//err = c.Run()  // returns when c finishes.
-
+	// Start the command (no pty)
+	log.Printf("[%v %v]\n", cmdName, cmdArgs)
+	err = c.Start() // returns immediately
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
-		log.Printf("[%s]\n", cmd)
+		return err, 253 // !?
+	} else {
+		if chaffing {
+			conn.EnableChaff()
+		}
+		defer conn.DisableChaff()
+		defer conn.ShutdownChaff()
+
+		if err := c.Wait(); err != nil {
+			fmt.Println("*** c.Wait() done ***")
+			if exiterr, ok := err.(*exec.ExitError); ok {
+				// The program has exited with an exit code != 0
+
+				// This works on both Unix and Windows. Although package
+				// syscall is generally platform dependent, WaitStatus is
+				// defined for both Unix and Windows and in both cases has
+				// an ExitStatus() method with the same signature.
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					exitStatus = status.ExitStatus()
+					log.Printf("Exit Status: %d", exitStatus)
+				}
+			}
+		}
 	}
 	return
 }
-*/
+
+// Perform a server->client copy
+func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus int) {
+	u, _ := user.Lookup(who)
+	var uid, gid uint32
+	fmt.Sscanf(u.Uid, "%d", &uid)
+	fmt.Sscanf(u.Gid, "%d", &gid)
+	log.Println("uid:", uid, "gid:", gid)
+
+	// Need to clear server's env and set key vars of the
+	// target user. This isn't perfect (TERM doesn't seem to
+	// work 100%; ANSI/xterm colour isn't working even
+	// if we set "xterm" or "ansi" here; and line count
+	// reported by 'stty -a' defaults to 24 regardless
+	// of client shell window used to run client.
+	// Investigate -- rlm 2018-01-26)
+	os.Clearenv()
+	os.Setenv("HOME", u.HomeDir)
+	os.Setenv("TERM", "vt102") // TODO: server or client option?
+
+	var c *exec.Cmd
+	cmdName := "/bin/tar"
+	cmdArgs := []string{"-cz", "-f", "-", srcPath}
+	c = exec.Command(cmdName, cmdArgs...)
+
+	//If os.Clearenv() isn't called by server above these will be seen in the
+	//client's session env.
+	//c.Env = []string{"HOME=" + u.HomeDir, "SUDO_GID=", "SUDO_UID=", "SUDO_USER=", "SUDO_COMMAND=", "MAIL=", "LOGNAME="+who}
+	c.Dir = u.HomeDir
+	c.SysProcAttr = &syscall.SysProcAttr{}
+	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
+	c.Stdin = conn
+	c.Stdout = conn
+	c.Stderr = conn
+
+	// Start the command (no pty)
+	log.Printf("[%v %v]\n", cmdName, cmdArgs)
+	err = c.Start() // returns immediately
+	if err != nil {
+		log.Printf("Command finished with error: %v", err)
+		return err, 253 // !?
+	} else {
+		if chaffing {
+			conn.EnableChaff()
+		}
+		defer conn.DisableChaff()
+		defer conn.ShutdownChaff()
+
+		if err := c.Wait(); err != nil {
+			fmt.Println("*** c.Wait() done ***")
+			if exiterr, ok := err.(*exec.ExitError); ok {
+				// The program has exited with an exit code != 0
+
+				// This works on both Unix and Windows. Although package
+				// syscall is generally platform dependent, WaitStatus is
+				// defined for both Unix and Windows and in both cases has
+				// an ExitStatus() method with the same signature.
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					exitStatus = status.ExitStatus()
+					log.Printf("Exit Status: %d", exitStatus)
+				}
+			}
+		}
+	}
+	return
+}
 
 // Run a command (via default shell) as a specific user
 //
@@ -167,7 +259,6 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 			_, e := io.Copy(conn, ptmx)
 			if e != nil {
 				log.Println("** pty->stdout ended **:", e.Error())
-				//wg.Done() //!return
 			}
 			// The above io.Copy() will exit when the command attached
 			// to the pty exits
@@ -190,8 +281,6 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 			}
 		}
 		wg.Wait() // Wait on pty->stdout completion to client
-		//conn.DisableChaff()
-		//conn.ShutdownChaff()
 	}
 	return
 }
@@ -374,11 +463,31 @@ func main() {
 					log.Printf("[Client->Server copy]\n")
 					// TODO: call function with hc, rec.cmd, chaffEnabled etc.
 					// func hooks tar cmd right-half of pipe to hc Reader
+					addr := hc.RemoteAddr()
+					hname := strings.Split(addr.String(), ":")[0]
+					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
+					runErr, cmdStatus := runClientToServerCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					if runErr != nil {
+						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
+					} else {
+						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						hc.SetStatus(uint8(cmdStatus))
+					}
 				} else if rec.op[0] == 'S' {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
 					// TODO: call function to copy rec.cmd (file list) to
 					// tar cmd left-half of pipeline to hc.Writer ?
+					addr := hc.RemoteAddr()
+					hname := strings.Split(addr.String(), ":")[0]
+					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
+					runErr, cmdStatus := runServerToClientCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					if runErr != nil {
+						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
+					} else {
+						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						hc.SetStatus(uint8(cmdStatus))
+					}
 				} else {
 					log.Println("[Bad cmdSpec]")
 				}
