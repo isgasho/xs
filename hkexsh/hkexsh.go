@@ -105,7 +105,7 @@ func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, i
 func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, rec *cmdSpec) (err error, exitStatus int) {
 	if remoteDest {
 		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
-		fmt.Fprintf(conn, "copyMode remoteDest ...\n")
+		//fmt.Fprintf(conn, "copyMode remoteDest ...\n")
 
 		var c *exec.Cmd
 
@@ -114,15 +114,18 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		//os.Setenv("TERM", "vt102") // TODO: server or client option?
 
 		cmdName := "/bin/tar"
-		cmdArgs := []string{"-cz", "-f", "/dev/stdout", files}
+		cmdArgs := []string{"-c", "-f", "/dev/stdout", strings.TrimSpace(files)}
 		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
 		// NOTE the lack of quotes around --xform option's sed expression.
 		// When args are passed in exec() format, no quoting is required
 		// (as this isn't input from a shell) (right? -rlm 20180823)
 		//cmdArgs := []string{"-xvz", "-C", files, `--xform=s#.*/\(.*\)#\1#`}
 		c = exec.Command(cmdName, cmdArgs...)
+		c.Dir, _ = os.Getwd()
+		fmt.Println("[wd:", c.Dir, "]")
 		c.Stdout = conn
-		
+		c.Stderr = os.Stderr
+
 		// Start the command (no pty)
 		err = c.Start() // returns immediately
 		if err != nil {
@@ -147,7 +150,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		}
 	} else {
 		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
-		fmt.Fprintf(conn, "copyMode localDest ...\n")
+		//fmt.Fprintf(conn, "copyMode localDest ...\n")
 		var c *exec.Cmd
 
 		//os.Clearenv()
@@ -162,7 +165,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		//	destPath := strings.Join({os.Getenv("PWD"),files}, os.PathSeparator)
 		//}
 
-		cmdArgs := []string{"-xvz", "-C", destPath}
+		cmdArgs := []string{"-x", "-C", destPath}
 		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
 		// NOTE the lack of quotes around --xform option's sed expression.
 		// When args are passed in exec() format, no quoting is required
@@ -172,7 +175,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		c.Stdin = conn
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
-		
+
 		// Start the command (no pty)
 		err = c.Start() // returns immediately
 		if err != nil {

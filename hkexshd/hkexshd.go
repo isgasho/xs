@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -38,7 +39,7 @@ type cmdSpec struct {
 
 /* -------------------------------------------------------------- */
 // Perform a client->server copy
-func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, chaffing bool) (err error, exitStatus int) {
+func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus int) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -58,28 +59,48 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, cha
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
+
+	var destDir string
+	if path.IsAbs(fpath) {
+		destDir = fpath
+	} else {
+		destDir = path.Join(u.HomeDir, fpath)
+	}
+	//stat, pe := os.Stat(destDir)
+	//_ = stat
+	//if pe != nil {
+	//	log.Fatal(pe)
+	//	return pe, 252 // ?!
+	//}
+
+	//if stat.IsDir(destBase) {
+	cmdArgs := []string{"-x", "-C", destDir}
+	//} else {
+	//		cmdArgs := []string{"-x",
+
 	// NOTE the lack of quotes around --xform option's sed expression.
 	// When args are passed in exec() format, no quoting is required
 	// (as this isn't input from a shell) (right? -rlm 20180823)
-	cmdArgs := []string{"-xvz", "-C", destPath}
 	//cmdArgs := []string{"-xvz", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
 	c = exec.Command(cmdName, cmdArgs...)
+
+	c.Dir = destDir
 
 	//If os.Clearenv() isn't called by server above these will be seen in the
 	//client's session env.
 	//c.Env = []string{"HOME=" + u.HomeDir, "SUDO_GID=", "SUDO_UID=", "SUDO_USER=", "SUDO_COMMAND=", "MAIL=", "LOGNAME="+who}
-	c.Dir = u.HomeDir
+	//c.Dir = u.HomeDir
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdin = conn
-	//c.Stdout = conn
-	//c.Stderr = conn
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
 
-		if chaffing {
-			conn.EnableChaff()
-		}
-		defer conn.DisableChaff()
-		defer conn.ShutdownChaff()
+	if chaffing {
+		conn.EnableChaff()
+	}
+	defer conn.DisableChaff()
+	defer conn.ShutdownChaff()
 
 	// Start the command (no pty)
 	log.Printf("[%v %v]\n", cmdName, cmdArgs)
@@ -129,7 +150,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
-	cmdArgs := []string{"-cz", "-f", "-", srcPath}
+	cmdArgs := []string{"-c", "-f", "-", srcPath}
 	c = exec.Command(cmdName, cmdArgs...)
 
 	//If os.Clearenv() isn't called by server above these will be seen in the
