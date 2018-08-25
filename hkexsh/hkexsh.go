@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
@@ -101,17 +102,101 @@ func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, i
 }
 
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
-func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, rec *cmdSpec) {
-	// TODO: Bring in runShellAs(), stripped down, from hkexshd
-	// and build either side of tar pipeline: names?
-	// runTarSrc(), runTarSink() ?
+func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, rec *cmdSpec) (err error, exitStatus int) {
 	if remoteDest {
 		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
-		fmt.Fprintf(conn, "copyMode remoteDest TODO\n")
+		fmt.Fprintf(conn, "copyMode remoteDest ...\n")
+
+		var c *exec.Cmd
+
+		//os.Clearenv()
+		//os.Setenv("HOME", u.HomeDir)
+		//os.Setenv("TERM", "vt102") // TODO: server or client option?
+
+		cmdName := "/bin/tar"
+		cmdArgs := []string{"-cz", "-f", "/dev/stdout", files}
+		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
+		// NOTE the lack of quotes around --xform option's sed expression.
+		// When args are passed in exec() format, no quoting is required
+		// (as this isn't input from a shell) (right? -rlm 20180823)
+		//cmdArgs := []string{"-xvz", "-C", files, `--xform=s#.*/\(.*\)#\1#`}
+		c = exec.Command(cmdName, cmdArgs...)
+		c.Stdout = conn
+		
+		// Start the command (no pty)
+		err = c.Start() // returns immediately
+		if err != nil {
+			fmt.Println(err)
+			//log.Fatal(err)
+		} else {
+			if err = c.Wait(); err != nil {
+				if exiterr, ok := err.(*exec.ExitError); ok {
+					// The program has exited with an exit code != 0
+
+					// This works on both Unix and Windows. Although package
+					// syscall is generally platform dependent, WaitStatus is
+					// defined for both Unix and Windows and in both cases has
+					// an ExitStatus() method with the same signature.
+					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+						exitStatus = status.ExitStatus()
+						log.Printf("Exit Status: %d", exitStatus)
+					}
+				}
+			}
+			fmt.Println("*** client->server cp finished ***")
+		}
 	} else {
 		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
-		fmt.Fprintf(conn, "copyMode localDest TODO\n")
+		fmt.Fprintf(conn, "copyMode localDest ...\n")
+		var c *exec.Cmd
+
+		//os.Clearenv()
+		//os.Setenv("HOME", u.HomeDir)
+		//os.Setenv("TERM", "vt102") // TODO: server or client option?
+
+		cmdName := "/bin/tar"
+		destPath := files
+		//if path.IsAbs(files) {
+		//	destPath := files
+		//} else {
+		//	destPath := strings.Join({os.Getenv("PWD"),files}, os.PathSeparator)
+		//}
+
+		cmdArgs := []string{"-xvz", "-C", destPath}
+		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
+		// NOTE the lack of quotes around --xform option's sed expression.
+		// When args are passed in exec() format, no quoting is required
+		// (as this isn't input from a shell) (right? -rlm 20180823)
+		//cmdArgs := []string{"-xvz", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
+		c = exec.Command(cmdName, cmdArgs...)
+		c.Stdin = conn
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		
+		// Start the command (no pty)
+		err = c.Start() // returns immediately
+		if err != nil {
+			fmt.Println(err)
+			//log.Fatal(err)
+		} else {
+			if err = c.Wait(); err != nil {
+				if exiterr, ok := err.(*exec.ExitError); ok {
+					// The program has exited with an exit code != 0
+
+					// This works on both Unix and Windows. Although package
+					// syscall is generally platform dependent, WaitStatus is
+					// defined for both Unix and Windows and in both cases has
+					// an ExitStatus() method with the same signature.
+					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+						exitStatus = status.ExitStatus()
+						log.Printf("Exit Status: %d", exitStatus)
+					}
+				}
+			}
+			fmt.Println("*** server->client cp finished ***")
+		}
 	}
+	return
 }
 
 // doShellMode begins an hkexsh shell session (one-shot command or interactive).
@@ -256,7 +341,7 @@ func main() {
 		// -else flatten otherArgs into space-delim list => copySrc
 		if pathIsDest {
 			if len(otherArgs) == 0 {
-				log.Fatal("ERROR: Must specify at least one src path for copy")
+				log.Fatal("ERROR: Must specify at least one dest path for copy")
 			} else {
 				for _, v := range otherArgs {
 					copySrc = append(copySrc, ' ')
@@ -267,7 +352,7 @@ func main() {
 			}
 		} else {
 			if len(otherArgs) == 0 {
-				log.Fatal("ERROR: Must specify dest path for copy")
+				log.Fatal("ERROR: Must specify src path for copy")
 			} else if len(otherArgs) == 1 {
 				copyDst = otherArgs[0]
 				if strings.Contains(copyDst, "*") || strings.Contains(copyDst, "?") {

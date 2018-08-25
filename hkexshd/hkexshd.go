@@ -61,7 +61,8 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, cha
 	// NOTE the lack of quotes around --xform option's sed expression.
 	// When args are passed in exec() format, no quoting is required
 	// (as this isn't input from a shell) (right? -rlm 20180823)
-	cmdArgs := []string{"-xzv", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
+	cmdArgs := []string{"-xvz", "-C", destPath}
+	//cmdArgs := []string{"-xvz", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
 	c = exec.Command(cmdName, cmdArgs...)
 
 	//If os.Clearenv() isn't called by server above these will be seen in the
@@ -71,8 +72,14 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, cha
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdin = conn
-	c.Stdout = conn
-	c.Stderr = conn
+	//c.Stdout = conn
+	//c.Stderr = conn
+
+		if chaffing {
+			conn.EnableChaff()
+		}
+		defer conn.DisableChaff()
+		defer conn.ShutdownChaff()
 
 	// Start the command (no pty)
 	log.Printf("[%v %v]\n", cmdName, cmdArgs)
@@ -81,12 +88,6 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, cha
 		log.Printf("Command finished with error: %v", err)
 		return err, 253 // !?
 	} else {
-		if chaffing {
-			conn.EnableChaff()
-		}
-		defer conn.DisableChaff()
-		defer conn.ShutdownChaff()
-
 		if err := c.Wait(); err != nil {
 			fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
@@ -102,8 +103,9 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, destPath string, cha
 				}
 			}
 		}
+		fmt.Println("*** client->server cp finished ***")
+		return
 	}
-	return
 }
 
 // Perform a server->client copy
@@ -136,9 +138,15 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	c.Dir = u.HomeDir
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
-	c.Stdin = conn
 	c.Stdout = conn
 	c.Stderr = conn
+
+	if chaffing {
+		conn.EnableChaff()
+	}
+	//defer conn.Close()
+	defer conn.DisableChaff()
+	defer conn.ShutdownChaff()
 
 	// Start the command (no pty)
 	log.Printf("[%v %v]\n", cmdName, cmdArgs)
@@ -147,12 +155,6 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 		log.Printf("Command finished with error: %v", err)
 		return err, 253 // !?
 	} else {
-		if chaffing {
-			conn.EnableChaff()
-		}
-		defer conn.DisableChaff()
-		defer conn.ShutdownChaff()
-
 		if err := c.Wait(); err != nil {
 			fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
@@ -168,8 +170,9 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 				}
 			}
 		}
+		fmt.Println("*** server->client cp finished ***")
+		return
 	}
-	return
 }
 
 // Run a command (via default shell) as a specific user
@@ -467,10 +470,13 @@ func main() {
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
 					runErr, cmdStatus := runClientToServerCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.op[0] = 0
 					if runErr != nil {
-						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
+						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
 					} else {
-						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 						hc.SetStatus(uint8(cmdStatus))
 					}
 				} else if rec.op[0] == 'S' {
@@ -482,10 +488,13 @@ func main() {
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
 					runErr, cmdStatus := runServerToClientCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.op[0] = 0
 					if runErr != nil {
-						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
+						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
 					} else {
-						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 						hc.SetStatus(uint8(cmdStatus))
 					}
 				} else {
