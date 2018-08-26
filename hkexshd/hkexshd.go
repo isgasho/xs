@@ -150,7 +150,10 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
-	cmdArgs := []string{"-c", "-f", "-", srcPath}
+	//cmdArgs := []string{"-c", "-f", "-", srcPath}
+	srcDir, srcBase := path.Split(srcPath)
+	cmdArgs := []string{"-c", "-C", srcDir, "-f", "-", srcBase}
+
 	c = exec.Command(cmdName, cmdArgs...)
 
 	//If os.Clearenv() isn't called by server above these will be seen in the
@@ -160,7 +163,11 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdout = conn
-	c.Stderr = conn
+	// Stderr sinkholing is important. Any extraneous output to tarpipe
+	// messes up remote side as it's expecting pure tar data.
+	// (For example, if user specifies abs paths, tar outputs
+	// "Removing leading '/' from path names")
+	c.Stderr = nil
 
 	if chaffing {
 		conn.EnableChaff()

@@ -35,8 +35,7 @@ type cmdSpec struct {
 }
 
 var (
-	wg      sync.WaitGroup
-	defPort = "2000"
+	wg sync.WaitGroup
 )
 
 // Get terminal size using 'stty' command
@@ -54,36 +53,30 @@ func GetSize() (cols, rows int, err error) {
 	return
 }
 
-func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, isDest bool, otherArgs []string) {
+func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, otherArgs []string) {
 	// Whether fancyArg is src or dst file depends on flag.Args() index;
 	//  fancyArg as last flag.Args() element denotes dstFile
 	//  fancyArg as not-last flag.Args() element denotes srcFile
-	var fancyUser, fancyHost, fancyPort, fancyPath string
+	var fancyUser, fancyHost, fancyPath string
 	for i, arg := range a {
 		if strings.Contains(arg, ":") || strings.Contains(arg, "@") {
 			fancyArg := strings.Split(flag.Arg(i), "@")
-			var fancyHostPortPath []string
+			var fancyHostPath []string
 			if len(fancyArg) < 2 {
 				//TODO: no user specified, use current
 				fancyUser = "[default:getUser]"
-				fancyHostPortPath = strings.Split(fancyArg[0], ":")
+				fancyHostPath = strings.Split(fancyArg[0], ":")
 			} else {
 				// user@....
 				fancyUser = fancyArg[0]
-				fancyHostPortPath = strings.Split(fancyArg[1], ":")
+				fancyHostPath = strings.Split(fancyArg[1], ":")
 			}
 
-			// [...@]host[:port[:path]]
-			if len(fancyHostPortPath) > 2 {
-				fancyPath = fancyHostPortPath[2]
-			} else if len(fancyHostPortPath) > 1 {
-				fancyPort = fancyHostPortPath[1]
+			// [...@]host[:path]
+			if len(fancyHostPath) > 1 {
+				fancyPath = fancyHostPath[1]
 			}
-			fancyHost = fancyHostPortPath[0]
-
-			if fancyPort == "" {
-				fancyPort = dp
-			}
+			fancyHost = fancyHostPath[0]
 
 			//if fancyPath == "" {
 			//	fancyPath = "."
@@ -93,19 +86,18 @@ func parseNonSwitchArgs(a []string, dp string) (user, host, port, path string, i
 				isDest = true
 				fmt.Println("remote path isDest")
 			}
-			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "port:", fancyPort, "path:", fancyPath)
+			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "path:", fancyPath)
 		} else {
 			otherArgs = append(otherArgs, a[i])
 		}
 	}
-	return fancyUser, fancyHost, fancyPort, fancyPath, isDest, otherArgs
+	return fancyUser, fancyHost, fancyPath, isDest, otherArgs
 }
 
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
 func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, rec *cmdSpec) (err error, exitStatus int) {
 	if remoteDest {
 		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
-		//fmt.Fprintf(conn, "copyMode remoteDest ...\n")
 
 		var c *exec.Cmd
 
@@ -114,7 +106,12 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		//os.Setenv("TERM", "vt102") // TODO: server or client option?
 
 		cmdName := "/bin/tar"
-		cmdArgs := []string{"-c", "-f", "/dev/stdout", strings.TrimSpace(files)}
+		cmdArgs := []string{"-c", "-f", "/dev/stdout"}
+		files = strings.TrimSpace(files)
+		for _, v := range strings.Split(files, " ") {
+			cmdArgs = append(cmdArgs, v)
+		}
+
 		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
 		// NOTE the lack of quotes around --xform option's sed expression.
 		// When args are passed in exec() format, no quoting is required
@@ -124,7 +121,11 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		c.Dir, _ = os.Getwd()
 		fmt.Println("[wd:", c.Dir, "]")
 		c.Stdout = conn
-		c.Stderr = os.Stderr
+		// Stderr sinkholing is important. Any extraneous output to tarpipe
+		// messes up remote side as it's expecting pure tar data.
+		// (For example, if user specifies abs paths, tar outputs
+		// "Removing leading '/' from path names")
+		c.Stderr = nil
 
 		// Start the command (no pty)
 		err = c.Start() // returns immediately
@@ -150,7 +151,6 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 		}
 	} else {
 		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
-		//fmt.Fprintf(conn, "copyMode localDest ...\n")
 		var c *exec.Cmd
 
 		//os.Clearenv()
@@ -159,11 +159,6 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, 
 
 		cmdName := "/bin/tar"
 		destPath := files
-		//if path.IsAbs(files) {
-		//	destPath := files
-		//} else {
-		//	destPath := strings.Join({os.Getenv("PWD"),files}, os.PathSeparator)
-		//}
 
 		cmdArgs := []string{"-x", "-C", destPath}
 		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
@@ -284,13 +279,13 @@ func main() {
 	var cAlg string
 	var hAlg string
 	var server string
+	var port uint
 	var cmdStr string
 
 	var recursiveCopy bool
 	var copySrc []byte
 	var copyDst string
 
-	var altUser string
 	var authCookie string
 	var chaffEnabled bool
 	var chaffFreqMin uint
@@ -304,8 +299,7 @@ func main() {
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "m", "H_SHA256", "hmac [\"H_SHA256\"]")
-	flag.StringVar(&server, "s", "localhost:"+defPort, "server hostname/address[:port]")
-	flag.StringVar(&altUser, "u", "", "specify alternate user")
+	flag.UintVar(&port, "p", 2000, "port")
 	flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
 	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt freq min (msecs)")
@@ -325,21 +319,28 @@ func main() {
 	}
 	flag.Parse()
 
-	tmpUser, tmpHost, tmpPort, tmpPath, pathIsDest, otherArgs :=
-		parseNonSwitchArgs(flag.Args(), defPort /* defPort */)
+	remoteUser, tmpHost, tmpPath, pathIsDest, otherArgs :=
+		parseNonSwitchArgs(flag.Args())
 	fmt.Println("otherArgs:", otherArgs)
-	//fmt.Println("tmpHost:", tmpHost)
-	//fmt.Println("tmpPath:", tmpPath)
-	if tmpUser != "" {
-		altUser = tmpUser
+
+	// Set defaults if user doesn't specify user, path or port
+	var uname string
+	if remoteUser == "" {
+		u, _ := user.Current()
+		uname = u.Username
+	} else {
+		uname = remoteUser
 	}
+
 	if tmpHost != "" {
-		server = tmpHost + ":" + tmpPort
-		//fmt.Println("tmpHost sets server to", server)
+		server = tmpHost + ":" + fmt.Sprintf("%d", port)
+	}
+	if tmpPath == "" {
+		tmpPath = "."
 	}
 
 	var fileArgs string
-	if !shellMode && tmpPath != "" {
+	if !shellMode /*&& tmpPath != ""*/ {
 		// -if pathIsSrc && len(otherArgs) > 1 ERROR
 		// -else flatten otherArgs into space-delim list => copySrc
 		if pathIsDest {
@@ -454,14 +455,6 @@ func main() {
 		} else {
 			log.Println("NOT A TTY")
 		}
-	}
-
-	var uname string
-	if len(altUser) == 0 {
-		u, _ := user.Current()
-		uname = u.Username
-	} else {
-		uname = altUser
 	}
 
 	if len(authCookie) == 0 {
