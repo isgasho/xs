@@ -260,6 +260,19 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 	wg.Wait()
 }
 
+func UsageShell() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [opts] [user]@server\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
+func UsageCp() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [opts] srcFileOrDir [...] [user]@server[:dstpath]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [opts] [user]@server[:srcFileOrDir] dstPath\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
 // hkexsh - a client for secure shell and file copy operations.
 //
 // While conforming to the basic net.Conn interface HKex.Conn has extra
@@ -282,7 +295,6 @@ func main() {
 	var port uint
 	var cmdStr string
 
-	var recursiveCopy bool
 	var copySrc []byte
 	var copyDst string
 
@@ -313,9 +325,9 @@ func main() {
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
 		shellMode = true
+		flag.Usage = UsageShell
 	} else {
-		// Note: only makes sense for client->server copies
-		flag.BoolVar(&recursiveCopy, "r", false, "recursive copy/preserve tree copy")
+		flag.Usage = UsageCp
 	}
 	flag.Parse()
 
