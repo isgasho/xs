@@ -95,7 +95,7 @@ func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, other
 }
 
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
-func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, recurs bool, rec *cmdSpec) (err error, exitStatus int) {
+func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec) (err error, exitStatus int) {
 	if remoteDest {
 		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
 
@@ -297,21 +297,21 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
-	flag.StringVar(&cAlg, "c", "C_AES_256", "cipher [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
-	flag.StringVar(&hAlg, "m", "H_SHA256", "hmac [\"H_SHA256\"]")
-	flag.UintVar(&port, "p", 2000, "port")
+	flag.StringVar(&cAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
+	flag.StringVar(&hAlg, "m", "H_SHA256", "`hmac` [\"H_SHA256\"]")
+	flag.UintVar(&port, "p", 2000, "`port`")
 	flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
-	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt freq min (msecs)")
-	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt freq max (msecs)")
-	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt size max (bytes)")
+	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt `freq` min (msecs)")
+	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt `freq` max (msecs)")
+	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt `size` max (bytes)")
 
 	// Find out what program we are (shell or copier)
 	myPath := strings.Split(os.Args[0], string(os.PathSeparator))
 	if myPath[len(myPath)-1] != "hkexcp" && myPath[len(myPath)-1] != "hkexcp.exe" {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
-		flag.StringVar(&cmdStr, "x", "", "command to run (default empty - interactive shell)")
+		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
 		shellMode = true
 	} else {
 		// Note: only makes sense for client->server copies
@@ -496,7 +496,7 @@ func main() {
 	if shellMode {
 		doShellMode(isInteractive, conn, oldState, rec)
 	} else {
-		doCopyMode(conn, pathIsDest, fileArgs, recursiveCopy, rec)
+		doCopyMode(conn, pathIsDest, fileArgs, rec)
 	}
 
 	if oldState != nil {
