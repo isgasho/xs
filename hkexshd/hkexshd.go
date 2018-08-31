@@ -66,22 +66,13 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 	} else {
 		destDir = path.Join(u.HomeDir, fpath)
 	}
-	//stat, pe := os.Stat(destDir)
-	//_ = stat
-	//if pe != nil {
-	//	log.Fatal(pe)
-	//	return pe, 252 // ?!
-	//}
 
-	//if stat.IsDir(destBase) {
-	cmdArgs := []string{"-x", "-C", destDir}
-	//} else {
-	//		cmdArgs := []string{"-x",
+	cmdArgs := []string{"-xz", "-C", destDir}
 
 	// NOTE the lack of quotes around --xform option's sed expression.
 	// When args are passed in exec() format, no quoting is required
 	// (as this isn't input from a shell) (right? -rlm 20180823)
-	//cmdArgs := []string{"-xvz", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
+	//cmdArgs := []string{"-x", "-C", destDir, `--xform=s#.*/\(.*\)#\1#`}
 	c = exec.Command(cmdName, cmdArgs...)
 
 	c.Dir = destDir
@@ -152,7 +143,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	cmdName := "/bin/tar"
 	//cmdArgs := []string{"-c", "-f", "-", srcPath}
 	srcDir, srcBase := path.Split(srcPath)
-	cmdArgs := []string{"-c", "-C", srcDir, "-f", "-", srcBase}
+	cmdArgs := []string{"-cz", "-C", srcDir, "-f", "-", srcBase}
 
 	c = exec.Command(cmdName, cmdArgs...)
 

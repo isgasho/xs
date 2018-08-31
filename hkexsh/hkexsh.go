@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -106,10 +107,20 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 		//os.Setenv("TERM", "vt102") // TODO: server or client option?
 
 		cmdName := "/bin/tar"
-		cmdArgs := []string{"-c", "-f", "/dev/stdout"}
+		cmdArgs := []string{"-cz", "-f", "/dev/stdout"}
 		files = strings.TrimSpace(files)
+		// Awesome fact: tar actually can take multiple -C args, and
+		// changes to the dest dir *as it sees each one*. This enables
+		// its use below, where clients can send scattered sets of source
+		// files and dirs to be extraced to a single dest dir server-side,
+		// whilst preserving the subtrees of dirs on the other side. :)
+		// Eg., tar -c -f /dev/stdout -C /dirA fileInA -C /some/where/dirB fileInB /foo/dirC
+		// packages fileInA, fileInB, and dirC at a single toplevel in the tar.
+		// The tar authors are/were real smarties :)
 		for _, v := range strings.Split(files, " ") {
-			cmdArgs = append(cmdArgs, v)
+			dirTmp, fileTmp := path.Split(v)
+			cmdArgs = append(cmdArgs, "-C", dirTmp, fileTmp)
+			//cmdArgs = append(cmdArgs, v)
 		}
 
 		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
@@ -160,7 +171,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 		cmdName := "/bin/tar"
 		destPath := files
 
-		cmdArgs := []string{"-x", "-C", destPath}
+		cmdArgs := []string{"-xz", "-C", destPath}
 		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
 		// NOTE the lack of quotes around --xform option's sed expression.
 		// When args are passed in exec() format, no quoting is required
