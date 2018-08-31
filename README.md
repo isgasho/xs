@@ -3,9 +3,10 @@ HKExSh
 
 'hkexsh' (HerraduraKEx shell) is a golang implementation of a simple
 remote shell client and server, similar in role to ssh, offering
-encrypted interactive and non-interactive sessions. The client and server
-programs (hkexsh and hkexshd) use a mostly drop-in replacement for golang's
-standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept()
+encrypted interactive and non-interactive sessions as well as file copying.
+
+The client and server programs (hkexsh and hkexshd) use a mostly drop-in
+replacement for golang's standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept()
 and the net.Conn type), which automatically negotiate keying material for
 'secure' sockets using the experimental HerraduraKEx key exchange algorithm
 first released at
@@ -69,12 +70,36 @@ To set accounts & passwords:
 * $ sudo hkexpasswd/hkexpasswd -u joebloggs
 * $ &lt;enter a password, enter again to confirm&gt;
 
-Running Clent and Server. In separate shells:
+Running Clent and Server
 --
-* [A]$ sudo hkexshd/hkexshd &  # add -d for debugging
-* [B]$ hkexsh/hkexsh -u joebloggs # add -d for debugging
+In separate shells A and B:
+* [A]$ cd hkexshd && sudo ./hkexshd &  # add -d for debugging
+
+Interactive shell
+* [B]$ cd hkexsh && ./hkexsh joebloggs@host-or-ip # add -d for debugging
+
+One-shot command
+* [B]$ cd hkexsh && ./hkexsh -x "ls /tmp" joebloggs@host-or-ip
 
 NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' afterwards
 to fix up the shell tty afterwards as stty echo may not be restored if client crashes
 or is interrupted.
 
+File Copying using hkexcp
+--
+hkexcp is a symlink to hkexsh, and the binary checks its own filename to determine whether it is being invoked in 'shell' or 'copy' mode. Refer to the '-h' output for differences in accepted options.
+
+General remote syntax is: user@server:[/]src-or-dest-path
+If no leading / is specified in src-or-dest-path, it is assumed to be relative to $HOME of the remote user.
+File operations are all performed as the remote user, so account permissions apply as expected.
+
+Local (client) to remote (server) copy:
+* cd hkexsh && ./hkexcp fileA /some/where/fileB /some/where/else/dirC joebloggs@host-or-ip:/remoteDir
+
+Remote (server) to local (client) copy:
+* cd hekxsh && ./hkexcp joebloggs@host-or-ip:/remoteDirOrFile /some/where/local/Dir
+
+
+NOTE: Renaming while copying is NOT supported (ie., like cp's 'cp /foo/bar/fileA ./fileB). Put another way, the destination (whether local or remote) is ALWAYS a dir.
+
+hkexcp uses tar with gzip compression (ala a 'tarpipe') under the hood, sending tar data over the hkex encrypted channel. Use the -d flag on client or server to see the generated tar commandlines if you're curious.
