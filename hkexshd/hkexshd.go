@@ -141,7 +141,10 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
-	//cmdArgs := []string{"-c", "-f", "-", srcPath}
+	if !path.IsAbs(srcPath) {
+		srcPath = fmt.Sprintf("%s%c%s", u.HomeDir, os.PathSeparator, srcPath)
+	}
+
 	srcDir, srcBase := path.Split(srcPath)
 	cmdArgs := []string{"-cz", "-C", srcDir, "-f", "-", srcBase}
 
