@@ -16,8 +16,10 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 
 	"blitter.com/go/goutmp"
@@ -36,53 +38,170 @@ type cmdSpec struct {
 }
 
 /* -------------------------------------------------------------- */
-
-/*
- // Run a command (via os.exec) as a specific user
-//
-// Uses ptys to support commands which expect a terminal.
-func runCmdAs(who string, cmd string, conn hkex.Conn) (err error) {
+// Perform a client->server copy
+func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus int) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
 	fmt.Sscanf(u.Gid, "%d", &gid)
-	fmt.Println("uid:", uid, "gid:", gid)
+	log.Println("uid:", uid, "gid:", gid)
 
-	args := strings.Split(cmd, " ")
-	arg0 := args[0]
-	args = args[1:]
-	c := exec.Command(arg0, args...)
+	// Need to clear server's env and set key vars of the
+	// target user. This isn't perfect (TERM doesn't seem to
+	// work 100%; ANSI/xterm colour isn't working even
+	// if we set "xterm" or "ansi" here; and line count
+	// reported by 'stty -a' defaults to 24 regardless
+	// of client shell window used to run client.
+	// Investigate -- rlm 2018-01-26)
+	os.Clearenv()
+	os.Setenv("HOME", u.HomeDir)
+	os.Setenv("TERM", "vt102") // TODO: server or client option?
+
+	var c *exec.Cmd
+	cmdName := "/bin/tar"
+
+	var destDir string
+	if path.IsAbs(fpath) {
+		destDir = fpath
+	} else {
+		destDir = path.Join(u.HomeDir, fpath)
+	}
+
+	cmdArgs := []string{"-xz", "-C", destDir}
+
+	// NOTE the lack of quotes around --xform option's sed expression.
+	// When args are passed in exec() format, no quoting is required
+	// (as this isn't input from a shell) (right? -rlm 20180823)
+	//cmdArgs := []string{"-x", "-C", destDir, `--xform=s#.*/\(.*\)#\1#`}
+	c = exec.Command(cmdName, cmdArgs...)
+
+	c.Dir = destDir
+
+	//If os.Clearenv() isn't called by server above these will be seen in the
+	//client's session env.
+	//c.Env = []string{"HOME=" + u.HomeDir, "SUDO_GID=", "SUDO_UID=", "SUDO_USER=", "SUDO_COMMAND=", "MAIL=", "LOGNAME="+who}
+	//c.Dir = u.HomeDir
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdin = conn
-	c.Stdout = conn
-	c.Stderr = conn
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
 
-	// Start the command with a pty.
-	ptmx, err := pty.Start(c) // returns immediately with ptmx file
-	if err != nil {
-		return err
+	if chaffing {
+		conn.EnableChaff()
 	}
-	// Make sure to close the pty at the end.
-	defer func() { _ = ptmx.Close() }() // Best effort.
-	// Copy stdin to the pty and the pty to stdout.
-	go func() { _, _ = io.Copy(ptmx, conn) }()
-	_, _ = io.Copy(conn, ptmx)
+	defer conn.DisableChaff()
+	defer conn.ShutdownChaff()
 
-	//err = c.Run()  // returns when c finishes.
-
+	// Start the command (no pty)
+	log.Printf("[%v %v]\n", cmdName, cmdArgs)
+	err = c.Start() // returns immediately
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
-		log.Printf("[%s]\n", cmd)
+		return err, 253 // !?
+	} else {
+		if err := c.Wait(); err != nil {
+			fmt.Println("*** c.Wait() done ***")
+			if exiterr, ok := err.(*exec.ExitError); ok {
+				// The program has exited with an exit code != 0
+
+				// This works on both Unix and Windows. Although package
+				// syscall is generally platform dependent, WaitStatus is
+				// defined for both Unix and Windows and in both cases has
+				// an ExitStatus() method with the same signature.
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					exitStatus = status.ExitStatus()
+					log.Printf("Exit Status: %d", exitStatus)
+				}
+			}
+		}
+		fmt.Println("*** client->server cp finished ***")
+		return
 	}
-	return
 }
-*/
+
+// Perform a server->client copy
+func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus int) {
+	u, _ := user.Lookup(who)
+	var uid, gid uint32
+	fmt.Sscanf(u.Uid, "%d", &uid)
+	fmt.Sscanf(u.Gid, "%d", &gid)
+	log.Println("uid:", uid, "gid:", gid)
+
+	// Need to clear server's env and set key vars of the
+	// target user. This isn't perfect (TERM doesn't seem to
+	// work 100%; ANSI/xterm colour isn't working even
+	// if we set "xterm" or "ansi" here; and line count
+	// reported by 'stty -a' defaults to 24 regardless
+	// of client shell window used to run client.
+	// Investigate -- rlm 2018-01-26)
+	os.Clearenv()
+	os.Setenv("HOME", u.HomeDir)
+	os.Setenv("TERM", "vt102") // TODO: server or client option?
+
+	var c *exec.Cmd
+	cmdName := "/bin/tar"
+	if !path.IsAbs(srcPath) {
+		srcPath = fmt.Sprintf("%s%c%s", u.HomeDir, os.PathSeparator, srcPath)
+	}
+
+	srcDir, srcBase := path.Split(srcPath)
+	cmdArgs := []string{"-cz", "-C", srcDir, "-f", "-", srcBase}
+
+	c = exec.Command(cmdName, cmdArgs...)
+
+	//If os.Clearenv() isn't called by server above these will be seen in the
+	//client's session env.
+	//c.Env = []string{"HOME=" + u.HomeDir, "SUDO_GID=", "SUDO_UID=", "SUDO_USER=", "SUDO_COMMAND=", "MAIL=", "LOGNAME="+who}
+	c.Dir = u.HomeDir
+	c.SysProcAttr = &syscall.SysProcAttr{}
+	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
+	c.Stdout = conn
+	// Stderr sinkholing is important. Any extraneous output to tarpipe
+	// messes up remote side as it's expecting pure tar data.
+	// (For example, if user specifies abs paths, tar outputs
+	// "Removing leading '/' from path names")
+	c.Stderr = nil
+
+	if chaffing {
+		conn.EnableChaff()
+	}
+	//defer conn.Close()
+	defer conn.DisableChaff()
+	defer conn.ShutdownChaff()
+
+	// Start the command (no pty)
+	log.Printf("[%v %v]\n", cmdName, cmdArgs)
+	err = c.Start() // returns immediately
+	if err != nil {
+		log.Printf("Command finished with error: %v", err)
+		return err, 253 // !?
+	} else {
+		if err := c.Wait(); err != nil {
+			fmt.Println("*** c.Wait() done ***")
+			if exiterr, ok := err.(*exec.ExitError); ok {
+				// The program has exited with an exit code != 0
+
+				// This works on both Unix and Windows. Although package
+				// syscall is generally platform dependent, WaitStatus is
+				// defined for both Unix and Windows and in both cases has
+				// an ExitStatus() method with the same signature.
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					exitStatus = status.ExitStatus()
+					log.Printf("Exit Status: %d", exitStatus)
+				}
+			}
+		}
+		fmt.Println("*** server->client cp finished ***")
+		return
+	}
+}
 
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
 func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus int) {
+	var wg sync.WaitGroup
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -135,15 +254,16 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 				log.Printf("[Setting term size to: %v %v]\n", sz.Rows, sz.Cols)
 				pty.Setsize(ptmx, &pty.Winsize{Rows: sz.Rows, Cols: sz.Cols})
 			}
+			fmt.Println("*** WinCh goroutine done ***")
 		}()
 
 		// Copy stdin to the pty.. (bgnd goroutine)
 		go func() {
 			_, e := io.Copy(ptmx, conn)
 			if e != nil {
-				log.Printf("** std->pty ended **\n")
-				return
+				log.Println("** stdin->pty ended **:", e.Error())
 			}
+			fmt.Println("*** stdin->pty goroutine done ***")
 		}()
 
 		if chaffing {
@@ -153,17 +273,25 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 		defer conn.ShutdownChaff()
 
 		// ..and the pty to stdout.
+		// This may take some time exceeding that of the
+		// actual command's lifetime, so the c.Wait() below
+		// must synchronize with the completion of this goroutine
+		// to ensure all stdout data gets to the client before
+		// connection is closed.
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			_, e := io.Copy(conn, ptmx)
 			if e != nil {
-				log.Printf("** pty->stdout ended **\n")
-				return
+				log.Println("** pty->stdout ended **:", e.Error())
 			}
 			// The above io.Copy() will exit when the command attached
 			// to the pty exits
+			fmt.Println("*** pty->stdout goroutine done ***")
 		}()
 
 		if err := c.Wait(); err != nil {
+			fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				// The program has exited with an exit code != 0
 
@@ -177,6 +305,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 				}
 			}
 		}
+		wg.Wait() // Wait on pty->stdout completion to client
 	}
 	return
 }
@@ -202,10 +331,10 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.StringVar(&laddr, "l", ":2000", "interface[:port] to listen")
-	flag.BoolVar(&chaffEnabled, "cE", true, "enabled chaff pkts")
-	flag.UintVar(&chaffFreqMin, "cfm", 100, "chaff pkt freq min (msecs)")
-	flag.UintVar(&chaffFreqMax, "cfM", 5000, "chaff pkt freq max (msecs)")
-	flag.UintVar(&chaffBytesMax, "cbM", 64, "chaff pkt size max (bytes)")
+	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts")
+	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt freq min (msecs)")
+	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt freq max (msecs)")
+	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt size max (bytes)")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.Parse()
 
@@ -352,6 +481,42 @@ func main() {
 						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						hc.SetStatus(uint8(cmdStatus))
+					}
+				} else if rec.op[0] == 'D' {
+					// File copy (destination) operation - client copy to server
+					log.Printf("[Client->Server copy]\n")
+					// TODO: call function with hc, rec.cmd, chaffEnabled etc.
+					// func hooks tar cmd right-half of pipe to hc Reader
+					addr := hc.RemoteAddr()
+					hname := strings.Split(addr.String(), ":")[0]
+					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
+					runErr, cmdStatus := runClientToServerCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.op[0] = 0
+					if runErr != nil {
+						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
+					} else {
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						hc.SetStatus(uint8(cmdStatus))
+					}
+				} else if rec.op[0] == 'S' {
+					// File copy (src) operation - server copy to client
+					log.Printf("[Server->Client copy]\n")
+					// TODO: call function to copy rec.cmd (file list) to
+					// tar cmd left-half of pipeline to hc.Writer ?
+					addr := hc.RemoteAddr()
+					hname := strings.Split(addr.String(), ":")[0]
+					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
+					runErr, cmdStatus := runServerToClientCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.op[0] = 0
+					if runErr != nil {
+						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
+					} else {
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 						hc.SetStatus(uint8(cmdStatus))
 					}
 				} else {
