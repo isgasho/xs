@@ -87,7 +87,7 @@ NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' aft
 to fix up the shell tty afterwards as stty echo may not be restored if client crashes
 or is interrupted.
 
-File Copying using hkexcp
+File Copying using hkexcp (**EXPERIMENTAL** - See issue tracker)
 --
 hkexcp is a symlink to hkexsh, and the binary checks its own filename to determine whether it is being invoked in 'shell' or 'copy' mode. Refer to the '-h' output for differences in accepted options.
 
