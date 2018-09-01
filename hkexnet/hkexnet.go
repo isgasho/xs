@@ -394,7 +394,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			}
 		}
 
-		if payloadLen > 16384 {
+		if payloadLen > 8192 {
 			log.Printf("[Insane payloadLen:%v]\n", payloadLen)
 			hc.Close()
 			return 1, errors.New("Insane payloadLen")
@@ -499,13 +499,15 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	// Would be nice to determine if the mutex scope
 	// could be tightened.
 	hc.m.Lock()
-	{
-		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b))
-
+	for uint32(len(b)) > 0 {
 		payloadLen = uint32(len(b))
+		if payloadLen > 8192 {
+			payloadLen = 8192
+		}
+		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b[0:payloadLen]))
 
 		// Calculate hmac on payload
-		hc.wm.Write(b)
+		hc.wm.Write(b[0:payloadLen])
 		hmacOut = hc.wm.Sum(nil)[0:4]
 
 		log.Printf("  (%04x> HMAC(o):%s\r\n", payloadLen, hex.EncodeToString(hmacOut))
@@ -514,14 +516,13 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 		// The StreamWriter acts like a pipe, forwarding whatever is
 		// written to it through the cipher, encrypting as it goes
 		ws := &cipher.StreamWriter{S: hc.w, W: &wb}
-		_, err = ws.Write(b)
+		_, err = ws.Write(b[0:payloadLen])
 		if err != nil {
 			panic(err)
 		}
 		log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
-
+		
 		ctrlStatOp := op
-
 		err = binary.Write(hc.c, binary.BigEndian, &ctrlStatOp)
 		if err == nil {
 			// Write hmac LSB, payloadLen followed by payload
@@ -533,6 +534,7 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 				}
 			}
 		}
+		b = b[payloadLen:]
 	}
 	hc.m.Unlock()
 

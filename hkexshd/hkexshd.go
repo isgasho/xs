@@ -67,7 +67,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 		destDir = path.Join(u.HomeDir, fpath)
 	}
 
-	cmdArgs := []string{"-xz", "-C", destDir}
+	cmdArgs := []string{"-x", "-C", destDir}
 
 	// NOTE the lack of quotes around --xform option's sed expression.
 	// When args are passed in exec() format, no quoting is required
@@ -146,7 +146,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	}
 
 	srcDir, srcBase := path.Split(srcPath)
-	cmdArgs := []string{"-cz", "-C", srcDir, "-f", "-", srcBase}
+	cmdArgs := []string{"-c", "-C", srcDir, "-f", "-", srcBase}
 
 	c = exec.Command(cmdName, cmdArgs...)
 
