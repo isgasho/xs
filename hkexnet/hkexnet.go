@@ -42,6 +42,8 @@ const (
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
 
+const MAX_PAYLOAD_LEN = 4*1024*1024*1024 - 1
+
 /*---------------------------------------------------------------------*/
 
 type (
@@ -376,7 +378,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				log.Println("unexpected Read() err:", err)
+				log.Println("[1]unexpected Read() err:", err)
 			} else {
 				log.Println("[Client hung up]")
 			}
@@ -386,7 +388,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		err = binary.Read(hc.c, binary.BigEndian, &payloadLen)
 		if err != nil {
 			if err.Error() != "EOF" {
-				log.Println("unexpected Read() err:", err)
+				log.Println("[2]unexpected Read() err:", err)
 				//panic(err)
 				// Cannot just return 0, err here - client won't hang up properly
 				// when 'exit' from shell. TODO: try server sending ctrlStatOp to
@@ -394,7 +396,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			}
 		}
 
-		if payloadLen > 8192 {
+		if payloadLen > MAX_PAYLOAD_LEN {
 			log.Printf("[Insane payloadLen:%v]\n", payloadLen)
 			hc.Close()
 			return 1, errors.New("Insane payloadLen")
@@ -409,7 +411,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil && err.Error() != "EOF" {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				log.Println("unexpected Read() err:", err)
+				log.Println("[3]unexpected Read() err:", err)
 			} else {
 				log.Println("[Client hung up]")
 			}
@@ -498,11 +500,15 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//
 	// Would be nice to determine if the mutex scope
 	// could be tightened.
-	hc.m.Lock()
 	for uint32(len(b)) > 0 {
+		hc.m.Lock()
+		fmt.Printf("--== TOTAL payloadLen (b):%d\n", len(b))
 		payloadLen = uint32(len(b))
-		if payloadLen > 8192 {
-			payloadLen = 8192
+		if payloadLen > MAX_PAYLOAD_LEN {
+			payloadLen = MAX_PAYLOAD_LEN
+			//fmt.Printf("--== payloadLen:%d\n", payloadLen)
+		} else {
+			//fmt.Printf("--== payloadLen:%d\n", payloadLen)
 		}
 		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b[0:payloadLen]))
 
@@ -521,7 +527,7 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 			panic(err)
 		}
 		log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
-		
+
 		ctrlStatOp := op
 		err = binary.Write(hc.c, binary.BigEndian, &ctrlStatOp)
 		if err == nil {
@@ -534,9 +540,11 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 				}
 			}
 		}
+		//Advance to next full (or final, partial) chunk of payload
 		b = b[payloadLen:]
+		hc.m.Unlock()
+		time.Sleep(200 * time.Millisecond)
 	}
-	hc.m.Unlock()
 
 	if err != nil {
 		//panic(err)

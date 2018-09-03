@@ -114,7 +114,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 		// changes to the dest dir *as it sees each one*. This enables
 		// its use below, where clients can send scattered sets of source
 		// files and dirs to be extracted to a single dest dir server-side,
-		// whilst preserving the subtrees of dirs on the other side. :)
+		// whilst preserving the subtrees of dirs on the other side.
 		// Eg., tar -c -f /dev/stdout -C /dirA fileInA -C /some/where/dirB fileInB /foo/dirC
 		// packages fileInA, fileInB, and dirC at a single toplevel in the tar.
 		// The tar authors are/were real smarties :)
@@ -130,7 +130,6 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			} else {
 				cmdArgs = append(cmdArgs, "-C", dirTmp, fileTmp)
 			}
-
 			//cmdArgs = append(cmdArgs, v)
 		}
 
