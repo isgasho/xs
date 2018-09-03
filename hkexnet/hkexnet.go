@@ -543,7 +543,7 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 		//Advance to next full (or final, partial) chunk of payload
 		b = b[payloadLen:]
 		hc.m.Unlock()
-		time.Sleep(200 * time.Millisecond)
+		//time.Sleep(200 * time.Millisecond)
 	}
 
 	if err != nil {
