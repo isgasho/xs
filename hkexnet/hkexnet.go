@@ -92,7 +92,8 @@ func (hc Conn) GetStatus() uint8 {
 
 func (hc *Conn) SetStatus(stat uint8) {
 	*hc.closeStat = stat
-	log.Println("closeStat:", *hc.closeStat)
+	fmt.Println("closeStat:", *hc.closeStat)
+	//log.Println("closeStat:", *hc.closeStat)
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -209,7 +210,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 }
 
 // Close a hkex.Conn
-func (hc Conn) Close() (err error) {
+func (hc *Conn) Close() (err error) {
 	hc.DisableChaff()
 	hc.WritePacket([]byte{byte(*hc.closeStat)}, CSOExitStatus)
 	*hc.closeStat = 0
@@ -219,12 +220,12 @@ func (hc Conn) Close() (err error) {
 }
 
 // LocalAddr returns the local network address.
-func (hc Conn) LocalAddr() net.Addr {
+func (hc *Conn) LocalAddr() net.Addr {
 	return hc.c.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address.
-func (hc Conn) RemoteAddr() net.Addr {
+func (hc *Conn) RemoteAddr() net.Addr {
 	return hc.c.RemoteAddr()
 }
 
@@ -243,7 +244,7 @@ func (hc Conn) RemoteAddr() net.Addr {
 // the deadline after successful Read or Write calls.
 //
 // A zero value for t means I/O operations will not time out.
-func (hc Conn) SetDeadline(t time.Time) error {
+func (hc *Conn) SetDeadline(t time.Time) error {
 	return hc.c.SetDeadline(t)
 }
 
@@ -252,14 +253,14 @@ func (hc Conn) SetDeadline(t time.Time) error {
 // Even if write times out, it may return n > 0, indicating that
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
-func (hc Conn) SetWriteDeadline(t time.Time) error {
+func (hc *Conn) SetWriteDeadline(t time.Time) error {
 	return hc.c.SetWriteDeadline(t)
 }
 
 // SetReadDeadline sets the deadline for future Read calls
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
-func (hc Conn) SetReadDeadline(t time.Time) error {
+func (hc *Conn) SetReadDeadline(t time.Time) error {
 	return hc.c.SetReadDeadline(t)
 }
 
@@ -304,7 +305,7 @@ func (hl HKExListener) Addr() net.Addr {
 // Accept a client connection, conforming to net.Listener.Accept()
 //
 // See go doc net.Listener.Accept
-func (hl HKExListener) Accept() (hc Conn, err error) {
+func (hl *HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
@@ -405,7 +406,10 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 
 		var payloadBytes = make([]byte, payloadLen)
 		n, err = io.ReadFull(hc.c, payloadBytes)
-		//log.Print(" << Read ", n, " payloadBytes")
+		//!fmt.Println(" << Read ", n, " payloadBytes")
+		//time.Sleep(100 * time.Millisecond)
+
+		//log.Println(" << Read ", n, " payloadBytes")
 
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
@@ -442,6 +446,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		} else if ctrlStatOp == CSOExitStatus {
 			if len(payloadBytes) > 0 {
 				*hc.closeStat = uint8(payloadBytes[0])
+				// If remote end is closing (255), reply we're closing ours
+				if payloadBytes[0] == 255 {
+					hc.SetStatus(255)
+					hc.Close()
+				}
 			} else {
 				log.Println("[truncated payload, cannot determine CSOExitStatus]")
 				*hc.closeStat = 98
@@ -487,7 +496,7 @@ func (hc Conn) Write(b []byte) (n int, err error) {
 }
 
 // Write a byte slice with specified ctrlStatusOp byte
-func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
+func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
 	var hmacOut []uint8
 	var payloadLen uint32
@@ -500,54 +509,51 @@ func (hc Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//
 	// Would be nice to determine if the mutex scope
 	// could be tightened.
-	for uint32(len(b)) > 0 {
-		hc.m.Lock()
-		fmt.Printf("--== TOTAL payloadLen (b):%d\n", len(b))
-		payloadLen = uint32(len(b))
-		if payloadLen > MAX_PAYLOAD_LEN {
-			payloadLen = MAX_PAYLOAD_LEN
-			//fmt.Printf("--== payloadLen:%d\n", payloadLen)
-		} else {
-			//fmt.Printf("--== payloadLen:%d\n", payloadLen)
-		}
-		log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b[0:payloadLen]))
+	hc.m.Lock()
+	//fmt.Printf("--== TOTAL payloadLen (b):%d\n", len(b))
+	payloadLen = uint32(len(b))
+	//!fmt.Printf("  --== payloadLen:%d\n", payloadLen)
+	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b[0:payloadLen]))
 
-		// Calculate hmac on payload
-		hc.wm.Write(b[0:payloadLen])
-		hmacOut = hc.wm.Sum(nil)[0:4]
+	// Calculate hmac on payload
+	hc.wm.Write(b[0:payloadLen])
+	hmacOut = hc.wm.Sum(nil)[0:4]
 
-		log.Printf("  (%04x> HMAC(o):%s\r\n", payloadLen, hex.EncodeToString(hmacOut))
+	log.Printf("  (%04x> HMAC(o):%s\r\n", payloadLen, hex.EncodeToString(hmacOut))
 
-		var wb bytes.Buffer
-		// The StreamWriter acts like a pipe, forwarding whatever is
-		// written to it through the cipher, encrypting as it goes
-		ws := &cipher.StreamWriter{S: hc.w, W: &wb}
-		_, err = ws.Write(b[0:payloadLen])
-		if err != nil {
-			panic(err)
-		}
-		log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
-
-		ctrlStatOp := op
-		err = binary.Write(hc.c, binary.BigEndian, &ctrlStatOp)
-		if err == nil {
-			// Write hmac LSB, payloadLen followed by payload
-			err = binary.Write(hc.c, binary.BigEndian, hmacOut)
-			if err == nil {
-				err = binary.Write(hc.c, binary.BigEndian, payloadLen)
-				if err == nil {
-					n, err = hc.c.Write(wb.Bytes())
-				}
-			}
-		}
-		//Advance to next full (or final, partial) chunk of payload
-		b = b[payloadLen:]
-		hc.m.Unlock()
-		//time.Sleep(200 * time.Millisecond)
+	var wb bytes.Buffer
+	// The StreamWriter acts like a pipe, forwarding whatever is
+	// written to it through the cipher, encrypting as it goes
+	ws := &cipher.StreamWriter{S: hc.w, W: &wb}
+	_, err = ws.Write(b[0:payloadLen])
+	if err != nil {
+		panic(err)
 	}
+	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
+
+	ctrlStatOp := op
+	err = binary.Write(hc.c, binary.BigEndian, &ctrlStatOp)
+	if err == nil {
+		// Write hmac LSB, payloadLen followed by payload
+		err = binary.Write(hc.c, binary.BigEndian, hmacOut)
+		if err == nil {
+			err = binary.Write(hc.c, binary.BigEndian, payloadLen)
+			if err == nil {
+				n, err = hc.c.Write(wb.Bytes())
+			} else {
+				//fmt.Println("[c]WriteError!")
+			}
+		} else {
+			//fmt.Println("[b]WriteError!")
+		}
+	} else {
+		//fmt.Println("[a]WriteError!")
+	}
+	hc.m.Unlock()
 
 	if err != nil {
 		//panic(err)
+		fmt.Println(err)
 		log.Println(err)
 	}
 	return

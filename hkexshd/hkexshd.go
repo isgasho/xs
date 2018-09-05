@@ -115,7 +115,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 				}
 			}
 		}
-		fmt.Println("*** client->server cp finished ***")
+		//fmt.Println("*** client->server cp finished ***")
 		return
 	}
 }
@@ -192,7 +192,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 				}
 			}
 		}
-		fmt.Println("*** server->client cp finished ***")
+		//fmt.Println("*** server->client cp finished ***")
 		return
 	}
 }
@@ -519,6 +519,12 @@ func main() {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 						hc.SetStatus(uint8(cmdStatus))
 					}
+					// Signal other end transfer is complete
+					hc.WritePacket([]byte{byte(255)}, hkexnet.CSOExitStatus)
+					//fmt.Println("Waiting for EOF from other end.")
+					//ackByte := make([]byte, 1, 1)
+					_, _ = hc.Read(nil /*ackByte*/)
+					//fmt.Println("Got remote end ack.")
 				} else {
 					log.Println("[Bad cmdSpec]")
 				}

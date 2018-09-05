@@ -168,7 +168,10 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					}
 				}
 			}
-			fmt.Println("*** client->server cp finished ***")
+			//fmt.Println("*** client->server cp finished ***")
+			// Signal other end transfer is complete
+			conn.WritePacket([]byte{byte(255)}, hkexnet.CSOExitStatus)
+			_, _ = conn.Read(nil /*ackByte*/)
 		}
 	} else {
 		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
@@ -212,7 +215,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					}
 				}
 			}
-			fmt.Println("*** server->client cp finished ***")
+			//fmt.Println("*** server->client cp finished ***")
 		}
 	}
 	return
