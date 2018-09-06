@@ -241,6 +241,9 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		_, inerr := io.Copy(os.Stdout, conn)
 		if inerr != nil {
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+			// Copy operations and user logging off will cause
+			// a "use of closed network connection" so handle that
+			// gracefully here
 			if !strings.HasSuffix(inerr.Error(), "use of closed network connection") {
 				log.Println(inerr)
 				os.Exit(1)
@@ -545,5 +548,8 @@ func main() {
 		_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 	}
 
+	if rec.status != 0 {
+		fmt.Fprintln(os.Stderr, "Remote end exited with status:", rec.status)
+	}
 	os.Exit(rec.status)
 }

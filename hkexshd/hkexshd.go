@@ -315,8 +315,8 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 					exitStatus = status.ExitStatus()
 					log.Printf("Exit Status: %d", exitStatus)
 				}
-		}
-		conn.SetStatus(uint8(exitStatus))
+			}
+			conn.SetStatus(uint8(exitStatus))
 		}
 		wg.Wait() // Wait on pty->stdout completion to client
 	}
@@ -530,7 +530,7 @@ func main() {
 					}
 					hc.SetStatus(uint8(cmdStatus))
 					// Signal other end transfer is complete
-					hc.WritePacket([]byte{byte(/*255*/cmdStatus)}, hkexnet.CSOExitStatus)
+					hc.WritePacket([]byte{byte( /*255*/ cmdStatus)}, hkexnet.CSOExitStatus)
 					//fmt.Println("Waiting for EOF from other end.")
 					_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
