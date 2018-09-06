@@ -77,7 +77,7 @@ type (
 
 		chaff ChaffConfig
 
-		closeStat *uint8        // close status (shell exit status: UNIX uint8)
+		closeStat *uint8        // close status
 		r         cipher.Stream //read cipherStream
 		rm        hash.Hash
 		w         cipher.Stream //write cipherStream
@@ -213,7 +213,6 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 func (hc *Conn) Close() (err error) {
 	hc.DisableChaff()
 	hc.WritePacket([]byte{byte(*hc.closeStat)}, CSOExitStatus)
-	*hc.closeStat = 0
 	err = hc.c.Close()
 	log.Println("[Conn Closing]")
 	return
@@ -379,8 +378,10 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+				//fmt.Println("[1]unexpected Read() err:", err)
 				log.Println("[1]unexpected Read() err:", err)
 			} else {
+				//fmt.Println("[Client hung up]")
 				log.Println("[Client hung up]")
 			}
 			return 0, err
@@ -424,45 +425,47 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		decryptN, err := rs.Read(payloadBytes)
 		log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(payloadBytes[:n]))
 		if err != nil {
-			panic(err)
-		}
+			//fmt.Print(err)
+			//panic(err)
+		} else {
 
-		// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
-		if ctrlStatOp == CSOChaff {
-			log.Printf("[Chaff pkt, discarded (len %d)]\n", decryptN)
-		} else if ctrlStatOp == CSOTermSize {
-			fmt.Sscanf(string(payloadBytes), "%d %d", &hc.Rows, &hc.Cols)
-			log.Printf("[TermSize pkt: rows %v cols %v]\n", hc.Rows, hc.Cols)
-			hc.WinCh <- WinSize{hc.Rows, hc.Cols}
-		} else if ctrlStatOp == CSOExitStatus {
-			if len(payloadBytes) > 0 {
-				*hc.closeStat = uint8(payloadBytes[0])
-				// If remote end is closing with an error, reply we're closing ours
-				if payloadBytes[0] != 0 {
+			// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
+			if ctrlStatOp == CSOChaff {
+				log.Printf("[Chaff pkt, discarded (len %d)]\n", decryptN)
+			} else if ctrlStatOp == CSOTermSize {
+				fmt.Sscanf(string(payloadBytes), "%d %d", &hc.Rows, &hc.Cols)
+				log.Printf("[TermSize pkt: rows %v cols %v]\n", hc.Rows, hc.Cols)
+				hc.WinCh <- WinSize{hc.Rows, hc.Cols}
+			} else if ctrlStatOp == CSOExitStatus {
+				if len(payloadBytes) > 0 {
 					hc.SetStatus(payloadBytes[0])
+					//!// If remote end is closing with an error, reply we're closing ours
+					//!if hc.GetStatus() != 0 {
+					//!	log.Print("CSOExitStatus:", hc.GetStatus())
 					hc.Close()
+					//!}
+				} else {
+					log.Println("[truncated payload, cannot determine CSOExitStatus]")
+					*hc.closeStat = 98
 				}
 			} else {
-				log.Println("[truncated payload, cannot determine CSOExitStatus]")
-				*hc.closeStat = 98
+				hc.dBuf.Write(payloadBytes)
+				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
 			}
-		} else {
-			hc.dBuf.Write(payloadBytes)
-			//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
-		}
 
-		// Re-calculate hmac, compare with received value
-		hc.rm.Write(payloadBytes)
-		hTmp := hc.rm.Sum(nil)[0:4]
-		log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
+			// Re-calculate hmac, compare with received value
+			hc.rm.Write(payloadBytes)
+			hTmp := hc.rm.Sum(nil)[0:4]
+			log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
-		if *hc.closeStat > 90 {
-			log.Println("[cannot verify HMAC]")
-		} else {
-			// Log alert if hmac didn't match, corrupted channel
-			if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
-				fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
-				_, _ = hc.c.Write([]byte{CSOHmacInvalid})
+			if *hc.closeStat > 90 {
+				log.Println("[cannot verify HMAC]")
+			} else {
+				// Log alert if hmac didn't match, corrupted channel
+				if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
+					fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
+					_, _ = hc.c.Write([]byte{CSOHmacInvalid})
+				}
 			}
 		}
 	}

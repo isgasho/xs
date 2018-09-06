@@ -169,7 +169,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			}
 			//fmt.Println("*** client->server cp finished ***")
 			// Signal other end transfer is complete
-			conn.WritePacket([]byte{byte(rec.status)}, hkexnet.CSOExitStatus)
+			conn.WritePacket([]byte{byte( /*255*/ rec.status)}, hkexnet.CSOExitStatus)
 			_, _ = conn.Read(nil /*ackByte*/)
 		}
 	} else {
@@ -214,6 +214,11 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					}
 				}
 			}
+			// return local status, if nonzero;
+			// otherwise, return remote status if nonzero
+			if exitStatus == 0 {
+				exitStatus = int(conn.GetStatus())
+			}
 			//fmt.Println("*** server->client cp finished ***")
 		}
 	}
@@ -235,9 +240,11 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		// exit with inerr == nil
 		_, inerr := io.Copy(os.Stdout, conn)
 		if inerr != nil {
-			fmt.Println(inerr)
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-			os.Exit(1)
+			if !strings.HasSuffix(inerr.Error(), "use of closed network connection") {
+				log.Println(inerr)
+				os.Exit(1)
+			}
 		}
 
 		rec.status = int(conn.GetStatus())
@@ -531,7 +538,7 @@ func main() {
 	if shellMode {
 		doShellMode(isInteractive, conn, oldState, rec)
 	} else {
-		doCopyMode(conn, pathIsDest, fileArgs, rec)
+		_, rec.status = doCopyMode(conn, pathIsDest, fileArgs, rec)
 	}
 
 	if oldState != nil {

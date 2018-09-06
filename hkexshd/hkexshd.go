@@ -315,7 +315,8 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 					exitStatus = status.ExitStatus()
 					log.Printf("Exit Status: %d", exitStatus)
 				}
-			}
+		}
+		conn.SetStatus(uint8(exitStatus))
 		}
 		wg.Wait() // Wait on pty->stdout completion to client
 	}
@@ -518,6 +519,7 @@ func main() {
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
 					runErr, cmdStatus := runServerToClientCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					//fmt.Print("ServerToClient cmdStatus:", cmdStatus)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.op[0] = 0
@@ -528,9 +530,8 @@ func main() {
 					}
 					hc.SetStatus(uint8(cmdStatus))
 					// Signal other end transfer is complete
-					hc.WritePacket([]byte{byte(cmdStatus)}, hkexnet.CSOExitStatus)
+					hc.WritePacket([]byte{byte(/*255*/cmdStatus)}, hkexnet.CSOExitStatus)
 					//fmt.Println("Waiting for EOF from other end.")
-					//ackByte := make([]byte, 1, 1)
 					_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
 				} else {
