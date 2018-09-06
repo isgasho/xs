@@ -27,7 +27,6 @@ import (
 	"blitter.com/go/goutmp"
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
-	"blitter.com/go/hkexsh/spinsult"
 	"github.com/kr/pty"
 )
 
@@ -324,10 +323,6 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 	return
 }
 
-func rejectUserMsg() string {
-	return "Begone, " + spinsult.GetSentence() + "\r\n"
-}
-
 // Demo of a simple server that listens and spawns goroutines for each
 // connecting client. Note this code is identical to standard tcp
 // server code, save for declaring 'hkex' rather than 'net'
@@ -454,19 +449,15 @@ func main() {
 				}
 				runtime.GC()
 
-				if !valid {
+				// Tell client if auth was valid
+				if valid {
+					hc.Write([]byte{1})
+				} else {
 					log.Println("Invalid user", string(rec.who))
-
-					// Signal other end auth failed
-					rec.status = hkexnet.CSEBadAuth
-					hc.SetStatus(hkexnet.CSEBadAuth)
-					s := make([]byte, 4)
-					binary.BigEndian.PutUint32(s, hkexnet.CSEBadAuth)
-					hc.WritePacket(s, hkexnet.CSOExitStatus)
-
-					hc.Write([]byte(rejectUserMsg()))
+					hc.Write([]byte{0})
 					return
 				}
+
 				log.Printf("[allowedCmds:%s]\n", allowedCmds)
 
 				if rec.op[0] == 'c' {

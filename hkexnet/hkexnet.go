@@ -37,7 +37,7 @@ import (
 // const CSExtendedCode - extended (>255 UNIX exit status) codes
 // This indicate channel-related or internal errors
 const (
-	CSEBadAuth     = 1024 // failed login
+	CSEBadAuth     = 1024 // Failed login password
 	CSETruncCSO           // No CSOExitStatus in payload
 	CSEStillOpen          // Channel closed unexpectedly
 	CSEExecFail           // cmd.Start() (exec) failed

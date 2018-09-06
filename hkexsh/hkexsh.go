@@ -27,6 +27,7 @@ import (
 
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
+	"blitter.com/go/hkexsh/spinsult"
 	isatty "github.com/mattn/go-isatty"
 )
 
@@ -163,7 +164,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					// an ExitStatus() method with the same signature.
 					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 						exitStatus = uint32(status.ExitStatus())
-						log.Printf("Exit Status: %d", exitStatus)
+						log.Printf("Exit Status: %d", exitStatus) //#
 						fmt.Print(stdErrBuffer)
 					}
 				}
@@ -285,9 +286,9 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 				log.Println(outerr)
 				fmt.Println(outerr)
 				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-				os.Exit(254)
+				log.Println("[Hanging up]")
+				os.Exit(0)
 			}
-			log.Println("[Sent EOF]")
 		}()
 	}
 
@@ -307,6 +308,10 @@ func UsageCp() {
 	fmt.Fprintf(os.Stderr, "%s [opts] srcFileOrDir [...] [user]@server[:dstpath]\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "%s [opts] [user]@server[:srcFileOrDir] dstPath\n", os.Args[0])
 	flag.PrintDefaults()
+}
+
+func rejectUserMsg() string {
+	return "Begone, " + spinsult.GetSentence() + "\r\n"
 }
 
 // hkexsh - a client for secure shell and file copy operations.
@@ -533,34 +538,35 @@ func main() {
 	_, err = conn.Write(rec.cmd)
 	_, err = conn.Write(rec.authCookie)
 
-	// Set up chaffing to server
-	conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
-	if chaffEnabled {
-		conn.EnableChaff()
-		defer conn.DisableChaff()
-		defer conn.ShutdownChaff()
-	}
-
-	if shellMode {
-		doShellMode(isInteractive, conn, oldState, rec)
+	// Read auth reply from server
+	authReply := make([]byte, 1) // bool: 0 = fail, 1 = pass
+	_, err = conn.Read(authReply)
+	if authReply[0] == 0 {
+		fmt.Fprintln(os.Stderr, rejectUserMsg())
+		rec.status = 255
 	} else {
-		_, rec.status = doCopyMode(conn, pathIsDest, fileArgs, rec)
+
+		// Set up chaffing to server
+		conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
+		if chaffEnabled {
+			conn.EnableChaff()
+			defer conn.DisableChaff()
+			defer conn.ShutdownChaff()
+		}
+
+		if shellMode {
+			doShellMode(isInteractive, conn, oldState, rec)
+		} else { // copyMode
+			_, rec.status = doCopyMode(conn, pathIsDest, fileArgs, rec)
+		}
+		
+		if rec.status != 0 {
+			fmt.Fprintln(os.Stderr, "Remote end exited with status:", rec.status)
+		}
 	}
 
 	if oldState != nil {
 		_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-	}
-
-	if rec.status != 0 {
-		fmt.Fprint(os.Stderr, "Remote end ")
-		if rec.status == hkexnet.CSEBadAuth {
-				// shell exit status can't hold CSEBadAuth (uint32)
-				rec.status = 255
-				fmt.Fprintln(os.Stderr, "replied: bad auth")
-		} else {
-			fmt.Fprintln(os.Stderr, "exited with status:", rec.status)
-		}
-
 	}
 	os.Exit(int(rec.status))
 }
