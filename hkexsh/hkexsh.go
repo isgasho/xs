@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -142,11 +143,8 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 		c.Dir, _ = os.Getwd()
 		fmt.Println("[wd:", c.Dir, "]")
 		c.Stdout = conn
-		// Stderr sinkholing is important. Any extraneous output to tarpipe
-		// messes up remote side as it's expecting pure tar data.
-		// (For example, if user specifies abs paths, tar outputs
-		// "Removing leading '/' from path names")
-		c.Stderr = nil
+		stdErrBuffer := new(bytes.Buffer)
+		c.Stderr = stdErrBuffer
 
 		// Start the command (no pty)
 		err = c.Start() // returns immediately
@@ -165,12 +163,13 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 						exitStatus = status.ExitStatus()
 						log.Printf("Exit Status: %d", exitStatus)
+						fmt.Print(stdErrBuffer)
 					}
 				}
 			}
 			//fmt.Println("*** client->server cp finished ***")
 			// Signal other end transfer is complete
-			conn.WritePacket([]byte{byte(255)}, hkexnet.CSOExitStatus)
+			conn.WritePacket([]byte{byte(rec.status)}, hkexnet.CSOExitStatus)
 			_, _ = conn.Read(nil /*ackByte*/)
 		}
 	} else {

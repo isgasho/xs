@@ -437,9 +437,9 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		} else if ctrlStatOp == CSOExitStatus {
 			if len(payloadBytes) > 0 {
 				*hc.closeStat = uint8(payloadBytes[0])
-				// If remote end is closing (255), reply we're closing ours
-				if payloadBytes[0] == 255 {
-					hc.SetStatus(255)
+				// If remote end is closing with an error, reply we're closing ours
+				if payloadBytes[0] != 0 {
+					hc.SetStatus(payloadBytes[0])
 					hc.Close()
 				}
 			} else {

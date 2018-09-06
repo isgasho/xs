@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -157,11 +158,14 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	c.SysProcAttr = &syscall.SysProcAttr{}
 	c.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
 	c.Stdout = conn
-	// Stderr sinkholing is important. Any extraneous output to tarpipe
-	// messes up remote side as it's expecting pure tar data.
+	// Stderr sinkholing (or buffering to something other than stdout)
+	// is important. Any extraneous output to tarpipe messes up remote
+	// side as it's expecting pure tar data.
 	// (For example, if user specifies abs paths, tar outputs
 	// "Removing leading '/' from path names")
-	c.Stderr = nil
+	stdErrBuffer := new(bytes.Buffer)
+	c.Stderr = stdErrBuffer
+	//c.Stderr = nil
 
 	if chaffing {
 		conn.EnableChaff()
@@ -189,6 +193,11 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 					exitStatus = status.ExitStatus()
 					log.Printf("Exit Status: %d", exitStatus)
+					// TODO: send stdErrBuffer to client via specific packet
+					// type so it can inform user
+					if len(stdErrBuffer.Bytes()) > 0 {
+						fmt.Print("TODO: (stderrBuffer to client):", stdErrBuffer)
+					}
 				}
 			}
 		}
@@ -217,6 +226,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
+	//os.Setenv("SHELL", "/bin/bash")
 	os.Setenv("TERM", "vt102") // TODO: server or client option?
 
 	var c *exec.Cmd
@@ -262,8 +272,9 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 			_, e := io.Copy(ptmx, conn)
 			if e != nil {
 				log.Println("** stdin->pty ended **:", e.Error())
+			} else {
+				log.Println("*** stdin->pty goroutine done ***")
 			}
-			fmt.Println("*** stdin->pty goroutine done ***")
 		}()
 
 		if chaffing {
@@ -284,10 +295,11 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 			_, e := io.Copy(conn, ptmx)
 			if e != nil {
 				log.Println("** pty->stdout ended **:", e.Error())
+			} else {
+				// The above io.Copy() will exit when the command attached
+				// to the pty exits
+				log.Println("*** pty->stdout goroutine done ***")
 			}
-			// The above io.Copy() will exit when the command attached
-			// to the pty exits
-			fmt.Println("*** pty->stdout goroutine done ***")
 		}()
 
 		if err := c.Wait(); err != nil {
@@ -486,8 +498,6 @@ func main() {
 				} else if rec.op[0] == 'D' {
 					// File copy (destination) operation - client copy to server
 					log.Printf("[Client->Server copy]\n")
-					// TODO: call function with hc, rec.cmd, chaffEnabled etc.
-					// func hooks tar cmd right-half of pipe to hc Reader
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
@@ -499,13 +509,11 @@ func main() {
 						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
-						hc.SetStatus(uint8(cmdStatus))
 					}
+					hc.SetStatus(uint8(cmdStatus))
 				} else if rec.op[0] == 'S' {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
-					// TODO: call function to copy rec.cmd (file list) to
-					// tar cmd left-half of pipeline to hc.Writer ?
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
@@ -517,10 +525,10 @@ func main() {
 						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
-						hc.SetStatus(uint8(cmdStatus))
 					}
+					hc.SetStatus(uint8(cmdStatus))
 					// Signal other end transfer is complete
-					hc.WritePacket([]byte{byte(255)}, hkexnet.CSOExitStatus)
+					hc.WritePacket([]byte{byte(cmdStatus)}, hkexnet.CSOExitStatus)
 					//fmt.Println("Waiting for EOF from other end.")
 					//ackByte := make([]byte, 1, 1)
 					_, _ = hc.Read(nil /*ackByte*/)
