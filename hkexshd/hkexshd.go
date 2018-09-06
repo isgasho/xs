@@ -101,7 +101,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 		return err, 253 // !?
 	} else {
 		if err := c.Wait(); err != nil {
-			fmt.Println("*** c.Wait() done ***")
+			//fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				// The program has exited with an exit code != 0
 
@@ -178,7 +178,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 		return err, 253 // !?
 	} else {
 		if err := c.Wait(); err != nil {
-			fmt.Println("*** c.Wait() done ***")
+			//fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				// The program has exited with an exit code != 0
 
@@ -291,7 +291,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 		}()
 
 		if err := c.Wait(); err != nil {
-			fmt.Println("*** c.Wait() done ***")
+			//fmt.Println("*** c.Wait() done ***")
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				// The program has exited with an exit code != 0
 

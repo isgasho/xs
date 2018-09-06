@@ -92,8 +92,8 @@ func (hc Conn) GetStatus() uint8 {
 
 func (hc *Conn) SetStatus(stat uint8) {
 	*hc.closeStat = stat
-	fmt.Println("closeStat:", *hc.closeStat)
-	//log.Println("closeStat:", *hc.closeStat)
+	//fmt.Println("closeStat:", *hc.closeStat)
+	log.Println("closeStat:", *hc.closeStat)
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -390,10 +390,6 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		if err != nil {
 			if err.Error() != "EOF" {
 				log.Println("[2]unexpected Read() err:", err)
-				//panic(err)
-				// Cannot just return 0, err here - client won't hang up properly
-				// when 'exit' from shell. TODO: try server sending ctrlStatOp to
-				// indicate to Reader? -rlm 20180428
 			}
 		}
 
@@ -402,14 +398,9 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			hc.Close()
 			return 1, errors.New("Insane payloadLen")
 		}
-		//log.Println("payloadLen:", payloadLen)
 
 		var payloadBytes = make([]byte, payloadLen)
 		n, err = io.ReadFull(hc.c, payloadBytes)
-		//!fmt.Println(" << Read ", n, " payloadBytes")
-		//time.Sleep(100 * time.Millisecond)
-
-		//log.Println(" << Read ", n, " payloadBytes")
 
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
@@ -483,7 +474,6 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 
 	log.Printf("Read() got %d bytes\n", retN)
 	copy(b, hc.dBuf.Next(retN))
-	//log.Printf("As Read() returns, hc.dBuf is %d long: %s\n", hc.dBuf.Len(), hex.Dump(hc.dBuf.Bytes()))
 	return retN, nil
 }
 
@@ -552,8 +542,6 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	hc.m.Unlock()
 
 	if err != nil {
-		//panic(err)
-		fmt.Println(err)
 		log.Println(err)
 	}
 	return
