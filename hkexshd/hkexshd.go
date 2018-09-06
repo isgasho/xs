@@ -9,6 +9,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -40,7 +41,7 @@ type cmdSpec struct {
 
 /* -------------------------------------------------------------- */
 // Perform a client->server copy
-func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus int) {
+func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus uint32) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -99,7 +100,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 	err = c.Start() // returns immediately
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
-		return err, 253 // !?
+		return err, hkexnet.CSEExecFail // !?
 	} else {
 		if err := c.Wait(); err != nil {
 			//fmt.Println("*** c.Wait() done ***")
@@ -111,7 +112,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 				// defined for both Unix and Windows and in both cases has
 				// an ExitStatus() method with the same signature.
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-					exitStatus = status.ExitStatus()
+					exitStatus = uint32(status.ExitStatus())
 					log.Printf("Exit Status: %d", exitStatus)
 				}
 			}
@@ -122,7 +123,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 }
 
 // Perform a server->client copy
-func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus int) {
+func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus uint32) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -179,7 +180,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	err = c.Start() // returns immediately
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
-		return err, 253 // !?
+		return err, hkexnet.CSEExecFail // !?
 	} else {
 		if err := c.Wait(); err != nil {
 			//fmt.Println("*** c.Wait() done ***")
@@ -191,7 +192,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 				// defined for both Unix and Windows and in both cases has
 				// an ExitStatus() method with the same signature.
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-					exitStatus = status.ExitStatus()
+					exitStatus = uint32(status.ExitStatus())
 					log.Printf("Exit Status: %d", exitStatus)
 					// TODO: send stdErrBuffer to client via specific packet
 					// type so it can inform user
@@ -209,7 +210,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus int) {
+func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus uint32) {
 	var wg sync.WaitGroup
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
@@ -248,7 +249,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 	// Start the command with a pty.
 	ptmx, err := pty.Start(c) // returns immediately with ptmx file
 	if err != nil {
-		return err, 0
+		return err, hkexnet.CSEPtyExecFail
 	}
 	// Make sure to close the pty at the end.
 	defer func() { _ = ptmx.Close() }() // Best effort.
@@ -312,11 +313,11 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 				// defined for both Unix and Windows and in both cases has
 				// an ExitStatus() method with the same signature.
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-					exitStatus = status.ExitStatus()
+					exitStatus = uint32(status.ExitStatus())
 					log.Printf("Exit Status: %d", exitStatus)
 				}
 			}
-			conn.SetStatus(uint8(exitStatus))
+			conn.SetStatus(exitStatus)
 		}
 		wg.Wait() // Wait on pty->stdout completion to client
 	}
@@ -446,6 +447,7 @@ func main() {
 					rec.op[0], string(rec.who), string(rec.cmd))
 
 				valid, allowedCmds := hkexsh.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
+
 				// Security scrub
 				for i := range rec.authCookie {
 					rec.authCookie[i] = 0
@@ -454,6 +456,14 @@ func main() {
 
 				if !valid {
 					log.Println("Invalid user", string(rec.who))
+
+					// Signal other end auth failed
+					rec.status = hkexnet.CSEBadAuth
+					hc.SetStatus(hkexnet.CSEBadAuth)
+					s := make([]byte, 4)
+					binary.BigEndian.PutUint32(s, hkexnet.CSEBadAuth)
+					hc.WritePacket(s, hkexnet.CSOExitStatus)
+
 					hc.Write([]byte(rejectUserMsg()))
 					return
 				}
@@ -474,7 +484,7 @@ func main() {
 						log.Printf("[Error spawning cmd for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
-						hc.SetStatus(uint8(cmdStatus))
+						hc.SetStatus(cmdStatus)
 					}
 				} else if rec.op[0] == 's' {
 					// Interactive session
@@ -494,7 +504,7 @@ func main() {
 						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
 					} else {
 						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
-						hc.SetStatus(uint8(cmdStatus))
+						hc.SetStatus(cmdStatus)
 					}
 				} else if rec.op[0] == 'D' {
 					// File copy (destination) operation - client copy to server
@@ -511,7 +521,7 @@ func main() {
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 					}
-					hc.SetStatus(uint8(cmdStatus))
+					hc.SetStatus(cmdStatus)
 				} else if rec.op[0] == 'S' {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
@@ -528,9 +538,11 @@ func main() {
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
 					}
-					hc.SetStatus(uint8(cmdStatus))
+					hc.SetStatus(cmdStatus)
 					// Signal other end transfer is complete
-					hc.WritePacket([]byte{byte( /*255*/ cmdStatus)}, hkexnet.CSOExitStatus)
+					s := make([]byte, 4)
+					binary.BigEndian.PutUint32(s, cmdStatus)
+					hc.WritePacket(s, hkexnet.CSOExitStatus)
 					//fmt.Println("Waiting for EOF from other end.")
 					_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")

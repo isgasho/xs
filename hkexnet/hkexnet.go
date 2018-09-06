@@ -34,6 +34,16 @@ import (
 	"blitter.com/go/hkexsh/herradurakex"
 )
 
+// const CSExtendedCode - extended (>255 UNIX exit status) codes
+// This indicate channel-related or internal errors
+const (
+	CSEBadAuth     = 1024 // failed login
+	CSETruncCSO           // No CSOExitStatus in payload
+	CSEStillOpen          // Channel closed unexpectedly
+	CSEExecFail           // cmd.Start() (exec) failed
+	CSEPtyExecFail        // pty.Start() (exec w/pty) failed
+)
+
 const (
 	CSONone        = iota // No error, normal packet
 	CSOHmacInvalid        // HMAC mismatch detected on remote end
@@ -77,7 +87,7 @@ type (
 
 		chaff ChaffConfig
 
-		closeStat *uint8        // close status
+		closeStat *uint32       // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
 		rm        hash.Hash
 		w         cipher.Stream //write cipherStream
@@ -86,11 +96,11 @@ type (
 	}
 )
 
-func (hc Conn) GetStatus() uint8 {
+func (hc Conn) GetStatus() uint32 {
 	return *hc.closeStat
 }
 
-func (hc *Conn) SetStatus(stat uint8) {
+func (hc *Conn) SetStatus(stat uint32) {
 	*hc.closeStat = stat
 	//fmt.Println("closeStat:", *hc.closeStat)
 	log.Println("closeStat:", *hc.closeStat)
@@ -177,7 +187,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
-	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint8), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint32), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// Send hkexnet.Conn parameters to remote side
@@ -205,14 +215,16 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 
 	hc.r, hc.rm, err = hc.getStream(hc.h.FA())
 	hc.w, hc.wm, err = hc.getStream(hc.h.FA())
-	*hc.closeStat = 99 // open or prematurely-closed status
+	*hc.closeStat = CSEStillOpen // open or prematurely-closed status
 	return
 }
 
 // Close a hkex.Conn
 func (hc *Conn) Close() (err error) {
 	hc.DisableChaff()
-	hc.WritePacket([]byte{byte(*hc.closeStat)}, CSOExitStatus)
+	s := make([]byte, 4)
+	binary.BigEndian.PutUint32(s, *hc.closeStat)
+	hc.WritePacket(s, CSOExitStatus)
 	err = hc.c.Close()
 	log.Println("[Conn Closing]")
 	return
@@ -308,13 +320,13 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(uint8), cipheropts: 0, opts: 0,
+		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(uint32), cipheropts: 0, opts: 0,
 			r: nil, w: nil}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(uint8), WinCh: make(chan WinSize, 1),
+	hc = Conn{m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(uint32), WinCh: make(chan WinSize, 1),
 		dBuf: new(bytes.Buffer)}
 
 	// Read in hkexnet.Conn parameters over raw Conn c
@@ -438,7 +450,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				hc.WinCh <- WinSize{hc.Rows, hc.Cols}
 			} else if ctrlStatOp == CSOExitStatus {
 				if len(payloadBytes) > 0 {
-					hc.SetStatus(payloadBytes[0])
+					hc.SetStatus(binary.BigEndian.Uint32(payloadBytes))
 					//!// If remote end is closing with an error, reply we're closing ours
 					//!if hc.GetStatus() != 0 {
 					//!	log.Print("CSOExitStatus:", hc.GetStatus())
@@ -446,7 +458,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 					//!}
 				} else {
 					log.Println("[truncated payload, cannot determine CSOExitStatus]")
-					*hc.closeStat = 98
+					*hc.closeStat = CSETruncCSO
 				}
 			} else {
 				hc.dBuf.Write(payloadBytes)
@@ -458,7 +470,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			hTmp := hc.rm.Sum(nil)[0:4]
 			log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
-			if *hc.closeStat > 90 {
+			if *hc.closeStat == CSETruncCSO {
 				log.Println("[cannot verify HMAC]")
 			} else {
 				// Log alert if hmac didn't match, corrupted channel

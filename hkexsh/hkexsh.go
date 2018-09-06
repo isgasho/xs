@@ -9,6 +9,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -34,7 +35,7 @@ type cmdSpec struct {
 	who        []byte
 	cmd        []byte
 	authCookie []byte
-	status     int // UNIX exit status is uint8, but os.Exit() wants int
+	status     uint32 // exit status (0-255 is std UNIX status)
 }
 
 var (
@@ -98,7 +99,7 @@ func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, other
 }
 
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
-func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec) (err error, exitStatus int) {
+func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec) (err error, exitStatus uint32) {
 	if remoteDest {
 		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
 
@@ -161,7 +162,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					// defined for both Unix and Windows and in both cases has
 					// an ExitStatus() method with the same signature.
 					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-						exitStatus = status.ExitStatus()
+						exitStatus = uint32(status.ExitStatus())
 						log.Printf("Exit Status: %d", exitStatus)
 						fmt.Print(stdErrBuffer)
 					}
@@ -169,7 +170,9 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			}
 			//fmt.Println("*** client->server cp finished ***")
 			// Signal other end transfer is complete
-			conn.WritePacket([]byte{byte( /*255*/ rec.status)}, hkexnet.CSOExitStatus)
+			s := make([]byte, 4)
+			binary.BigEndian.PutUint32(s, rec.status)
+			conn.WritePacket(s, hkexnet.CSOExitStatus)
 			_, _ = conn.Read(nil /*ackByte*/)
 		}
 	} else {
@@ -209,7 +212,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 					// defined for both Unix and Windows and in both cases has
 					// an ExitStatus() method with the same signature.
 					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-						exitStatus = status.ExitStatus()
+						exitStatus = uint32(status.ExitStatus())
 						log.Printf("Exit Status: %d", exitStatus)
 					}
 				}
@@ -217,7 +220,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			// return local status, if nonzero;
 			// otherwise, return remote status if nonzero
 			if exitStatus == 0 {
-				exitStatus = int(conn.GetStatus())
+				exitStatus = uint32(conn.GetStatus())
 			}
 			//fmt.Println("*** server->client cp finished ***")
 		}
@@ -250,7 +253,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			}
 		}
 
-		rec.status = int(conn.GetStatus())
+		rec.status = uint32(conn.GetStatus())
 		log.Println("rec.status:", rec.status)
 
 		if isInteractive {
@@ -282,7 +285,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 				log.Println(outerr)
 				fmt.Println(outerr)
 				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
-				os.Exit(255)
+				os.Exit(254)
 			}
 			log.Println("[Sent EOF]")
 		}()
@@ -549,7 +552,15 @@ func main() {
 	}
 
 	if rec.status != 0 {
-		fmt.Fprintln(os.Stderr, "Remote end exited with status:", rec.status)
+		fmt.Fprint(os.Stderr, "Remote end ")
+		if rec.status == hkexnet.CSEBadAuth {
+				// shell exit status can't hold CSEBadAuth (uint32)
+				rec.status = 255
+				fmt.Fprintln(os.Stderr, "replied: bad auth")
+		} else {
+			fmt.Fprintln(os.Stderr, "exited with status:", rec.status)
+		}
+
 	}
-	os.Exit(rec.status)
+	os.Exit(int(rec.status))
 }
