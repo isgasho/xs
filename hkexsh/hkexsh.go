@@ -102,7 +102,7 @@ func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, other
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
 func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec) (err error, exitStatus uint32) {
 	if remoteDest {
-		fmt.Println("local files:", files, "remote filepath:", string(rec.cmd))
+		log.Println("local files:", files, "remote filepath:", string(rec.cmd))
 
 		var c *exec.Cmd
 
@@ -111,7 +111,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 		//os.Setenv("TERM", "vt102") // TODO: server or client option?
 
 		cmdName := "/bin/tar"
-		cmdArgs := []string{"-c", "-f", "/dev/stdout"}
+		cmdArgs := []string{"-cz", "-f", "/dev/stdout"}
 		files = strings.TrimSpace(files)
 		// Awesome fact: tar actually can take multiple -C args, and
 		// changes to the dest dir *as it sees each one*. This enables
@@ -136,14 +136,14 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			//cmdArgs = append(cmdArgs, v)
 		}
 
-		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
+		log.Printf("[%v %v]\n", cmdName, cmdArgs)
 		// NOTE the lack of quotes around --xform option's sed expression.
 		// When args are passed in exec() format, no quoting is required
 		// (as this isn't input from a shell) (right? -rlm 20180823)
 		//cmdArgs := []string{"-xvz", "-C", files, `--xform=s#.*/\(.*\)#\1#`}
 		c = exec.Command(cmdName, cmdArgs...)
 		c.Dir, _ = os.Getwd()
-		fmt.Println("[wd:", c.Dir, "]")
+		log.Println("[wd:", c.Dir, "]")
 		c.Stdout = conn
 		stdErrBuffer := new(bytes.Buffer)
 		c.Stderr = stdErrBuffer
@@ -177,7 +177,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			_, _ = conn.Read(nil /*ackByte*/)
 		}
 	} else {
-		fmt.Println("remote filepath:", string(rec.cmd), "local files:", files)
+		log.Println("remote filepath:", string(rec.cmd), "local files:", files)
 		var c *exec.Cmd
 
 		//os.Clearenv()
@@ -187,8 +187,8 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 		cmdName := "/bin/tar"
 		destPath := files
 
-		cmdArgs := []string{"-x", "-C", destPath}
-		fmt.Printf("[%v %v]\n", cmdName, cmdArgs)
+		cmdArgs := []string{"-xz", "-C", destPath}
+		log.Printf("[%v %v]\n", cmdName, cmdArgs)
 		// NOTE the lack of quotes around --xform option's sed expression.
 		// When args are passed in exec() format, no quoting is required
 		// (as this isn't input from a shell) (right? -rlm 20180823)
