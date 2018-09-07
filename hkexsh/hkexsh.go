@@ -31,14 +31,6 @@ import (
 	isatty "github.com/mattn/go-isatty"
 )
 
-type cmdSpec struct {
-	op         []byte
-	who        []byte
-	cmd        []byte
-	authCookie []byte
-	status     uint32 // exit status (0-255 is std UNIX status)
-}
-
 var (
 	wg sync.WaitGroup
 )
@@ -100,9 +92,9 @@ func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, other
 }
 
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
-func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec) (err error, exitStatus uint32) {
+func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.Session) (err error, exitStatus uint32) {
 	if remoteDest {
-		log.Println("local files:", files, "remote filepath:", string(rec.cmd))
+		log.Println("local files:", files, "remote filepath:", string(rec.Cmd()))
 
 		var c *exec.Cmd
 
@@ -172,12 +164,12 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 			//fmt.Println("*** client->server cp finished ***")
 			// Signal other end transfer is complete
 			s := make([]byte, 4)
-			binary.BigEndian.PutUint32(s, rec.status)
+			binary.BigEndian.PutUint32(s, rec.Status())
 			conn.WritePacket(s, hkexnet.CSOExitStatus)
 			_, _ = conn.Read(nil /*ackByte*/)
 		}
 	} else {
-		log.Println("remote filepath:", string(rec.cmd), "local files:", files)
+		log.Println("remote filepath:", string(rec.Cmd()), "local files:", files)
 		var c *exec.Cmd
 
 		//os.Clearenv()
@@ -230,7 +222,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *cmdSpec)
 }
 
 // doShellMode begins an hkexsh shell session (one-shot command or interactive).
-func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State, rec *cmdSpec) {
+func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State, rec *hkexsh.Session) {
 	//client reader (from server) goroutine
 	//Read remote end's stdout
 	wg.Add(1)
@@ -254,8 +246,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			}
 		}
 
-		rec.status = uint32(conn.GetStatus())
-		log.Println("rec.status:", rec.status)
+		rec.SetStatus(uint32(conn.GetStatus()))
+		log.Println("rec.status:", rec.Status)
 
 		if isInteractive {
 			log.Println("[* Got EOF *]")
@@ -522,28 +514,23 @@ func main() {
 		ab = nil
 		runtime.GC()
 	}
-
-	rec := &cmdSpec{
-		op:         op,
-		who:        []byte(uname),
-		cmd:        []byte(cmdStr),
-		authCookie: []byte(authCookie),
-		status:     0}
+	
+	rec := hkexsh.NewSession(op, []byte(uname), []byte(cmdStr), []byte(authCookie),0)
 
 	_, err = fmt.Fprintf(conn, "%d %d %d %d\n",
-		len(rec.op), len(rec.who), len(rec.cmd), len(rec.authCookie))
+		len(rec.Op()), len(rec.Who()), len(rec.Cmd()), len(rec.AuthCookie(true)))
 
-	_, err = conn.Write(rec.op)
-	_, err = conn.Write(rec.who)
-	_, err = conn.Write(rec.cmd)
-	_, err = conn.Write(rec.authCookie)
+	_, err = conn.Write(rec.Op())
+	_, err = conn.Write(rec.Who())
+	_, err = conn.Write(rec.Cmd())
+	_, err = conn.Write(rec.AuthCookie(true))
 
 	// Read auth reply from server
 	authReply := make([]byte, 1) // bool: 0 = fail, 1 = pass
 	_, err = conn.Read(authReply)
 	if authReply[0] == 0 {
 		fmt.Fprintln(os.Stderr, rejectUserMsg())
-		rec.status = 255
+		rec.SetStatus(255)
 	} else {
 
 		// Set up chaffing to server
@@ -557,16 +544,17 @@ func main() {
 		if shellMode {
 			doShellMode(isInteractive, conn, oldState, rec)
 		} else { // copyMode
-			_, rec.status = doCopyMode(conn, pathIsDest, fileArgs, rec)
+				_, s := doCopyMode(conn, pathIsDest, fileArgs, rec)
+				rec.SetStatus(s)
 		}
-		
-		if rec.status != 0 {
-			fmt.Fprintln(os.Stderr, "Remote end exited with status:", rec.status)
+
+		if rec.Status() != 0 {
+			fmt.Fprintln(os.Stderr, "Remote end exited with status:", rec.Status())
 		}
 	}
 
 	if oldState != nil {
 		_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 	}
-	os.Exit(int(rec.status))
+	os.Exit(int(rec.Status()))
 }

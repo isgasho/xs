@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,14 +28,6 @@ import (
 	"blitter.com/go/hkexsh/hkexnet"
 	"github.com/kr/pty"
 )
-
-type cmdSpec struct {
-	op         []byte
-	who        []byte
-	cmd        []byte
-	authCookie []byte
-	status     int
-}
 
 /* -------------------------------------------------------------- */
 // Perform a client->server copy
@@ -394,138 +385,140 @@ func main() {
 				defer hc.Close()
 
 				//We use io.ReadFull() here to guarantee we consume
-				//just the data we want for the cmdSpec, and no more.
+				//just the data we want for the hkexsh.Session, and no more.
 				//Otherwise data will be sitting in the channel that isn't
 				//passed down to the command handlers.
-				var rec cmdSpec
+				var rec hkexsh.Session
 				var len1, len2, len3, len4 uint32
 
 				n, err := fmt.Fscanf(hc, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
-				log.Printf("cmdSpec read:%d %d %d %d\n", len1, len2, len3, len4)
+				log.Printf("hkexsh.Session read:%d %d %d %d\n", len1, len2, len3, len4)
 
 				if err != nil || n < 4 {
-					log.Println("[Bad cmdSpec fmt]")
+					log.Println("[Bad hkexsh.Session fmt]")
 					return err
 				}
 				//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
 
-				rec.op = make([]byte, len1, len1)
-				_, err = io.ReadFull(hc, rec.op)
+				tmp := make([]byte, len1, len1)
+				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
-					log.Println("[Bad cmdSpec.op]")
+					log.Println("[Bad hkexsh.Session.Op]")
 					return err
 				}
-				rec.who = make([]byte, len2, len2)
-				_, err = io.ReadFull(hc, rec.who)
+				rec.SetOp(tmp)
+
+				tmp = make([]byte, len2, len2)
+				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
-					log.Println("[Bad cmdSpec.who]")
+					log.Println("[Bad hkexsh.Session.Who]")
 					return err
 				}
+				rec.SetWho(tmp)
 
-				rec.cmd = make([]byte, len3, len3)
-				_, err = io.ReadFull(hc, rec.cmd)
+				tmp = make([]byte, len3, len3)
+				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
-					log.Println("[Bad cmdSpec.cmd]")
+					log.Println("[Bad hkexsh.Session.Cmd]")
 					return err
 				}
+				rec.SetCmd(tmp)
 
-				rec.authCookie = make([]byte, len4, len4)
-				_, err = io.ReadFull(hc, rec.authCookie)
+				tmp = make([]byte, len4, len4)
+				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
-					log.Println("[Bad cmdSpec.authCookie]")
+					log.Println("[Bad hkexsh.Session.AuthCookie]")
 					return err
 				}
+				rec.SetAuthCookie(tmp)
 
-				log.Printf("[cmdSpec: op:%c who:%s cmd:%s auth:****]\n",
-					rec.op[0], string(rec.who), string(rec.cmd))
+				log.Printf("[hkexsh.Session: op:%c who:%s cmd:%s auth:****]\n",
+					rec.Op()[0], string(rec.Who()), string(rec.Cmd()))
 
-				valid, allowedCmds := hkexsh.AuthUser(string(rec.who), string(rec.authCookie), "/etc/hkexsh.passwd")
+				valid, allowedCmds := hkexsh.AuthUser(string(rec.Who()), string(rec.AuthCookie(true)), "/etc/hkexsh.passwd")
 
 				// Security scrub
-				for i := range rec.authCookie {
-					rec.authCookie[i] = 0
-				}
-				runtime.GC()
+				rec.ClearAuthCookie()
 
 				// Tell client if auth was valid
 				if valid {
 					hc.Write([]byte{1})
 				} else {
-					log.Println("Invalid user", string(rec.who))
-					hc.Write([]byte{0})
+					log.Println("Invalid user", string(rec.Who()))
+					hc.Write([]byte{0}) // ? required?
 					return
 				}
 
 				log.Printf("[allowedCmds:%s]\n", allowedCmds)
 
-				if rec.op[0] == 'c' {
+				if rec.Op()[0] == 'c' {
 					// Non-interactive command
 					addr := hc.RemoteAddr()
 					//hname := goutmp.GetHost(addr.String())
 					hname := strings.Split(addr.String(), ":")[0]
 
-					log.Printf("[Running command for [%s@%s]]\n", rec.who, hname)
-					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), false, hc, chaffEnabled)
+					log.Printf("[Running command for [%s@%s]]\n", rec.Who(), hname)
+					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.Cmd()), false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
-					rec.op[0] = 0
+					rec.SetOp([]byte{0})
 					if runErr != nil {
-						log.Printf("[Error spawning cmd for %s@%s]\n", rec.who, hname)
+						log.Printf("[Error spawning cmd for %s@%s]\n", rec.Who, hname)
 					} else {
-						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who, hname, cmdStatus)
 						hc.SetStatus(cmdStatus)
 					}
-				} else if rec.op[0] == 's' {
+				} else if rec.Op()[0] == 's' {
 					// Interactive session
 					addr := hc.RemoteAddr()
 					//hname := goutmp.GetHost(addr.String())
 					hname := strings.Split(addr.String(), ":")[0]
-					log.Printf("[Running shell for [%s@%s]]\n", rec.who, hname)
+					log.Printf("[Running shell for [%s@%s]]\n", rec.Who(), hname)
 
-					utmpx := goutmp.Put_utmp(string(rec.who), hname)
+					utmpx := goutmp.Put_utmp(string(rec.Who()), hname)
 					defer func() { goutmp.Unput_utmp(utmpx) }()
-					goutmp.Put_lastlog_entry("hkexsh", string(rec.who), hname)
-					runErr, cmdStatus := runShellAs(string(rec.who), string(rec.cmd), true, hc, chaffEnabled)
+					goutmp.Put_lastlog_entry("hkexsh", string(rec.Who()), hname)
+					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.Cmd()), true, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
-					rec.op[0] = 0
+					rec.SetOp([]byte{0})
 					if runErr != nil {
-						log.Printf("[Error spawning shell for %s@%s]\n", rec.who, hname)
+						log.Printf("[Error spawning shell for %s@%s]\n", rec.Who(), hname)
 					} else {
-						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 						hc.SetStatus(cmdStatus)
 					}
-				} else if rec.op[0] == 'D' {
+				} else if rec.Op()[0] == 'D' {
 					// File copy (destination) operation - client copy to server
 					log.Printf("[Client->Server copy]\n")
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
-					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
-					runErr, cmdStatus := runClientToServerCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
+					runErr, cmdStatus := runClientToServerCopyAs(string(rec.Who()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
-					rec.op[0] = 0
+					rec.SetOp([]byte{0})
 					if runErr != nil {
-						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
+						log.Printf("[Error spawning cp for %s@%s]\n", rec.Who(), hname)
 					} else {
-						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
 					hc.SetStatus(cmdStatus)
-				} else if rec.op[0] == 'S' {
+				} else if rec.Op()[0] == 'S' {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
-					log.Printf("[Running copy for [%s@%s]]\n", rec.who, hname)
-					runErr, cmdStatus := runServerToClientCopyAs(string(rec.who), hc, string(rec.cmd), chaffEnabled)
+					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
+					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), hc, string(rec.Cmd()), chaffEnabled)
 					//fmt.Print("ServerToClient cmdStatus:", cmdStatus)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
-					rec.op[0] = 0
+					rec.SetOp([]byte{0})
 					if runErr != nil {
-						log.Printf("[Error spawning cp for %s@%s]\n", rec.who, hname)
+						log.Printf("[Error spawning cp for %s@%s]\n", rec.Who(), hname)
 					} else {
-						log.Printf("[Command completed for %s@%s, status %d]\n", rec.who, hname, cmdStatus)
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
 					hc.SetStatus(cmdStatus)
 					// Signal other end transfer is complete
@@ -536,7 +529,7 @@ func main() {
 					_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
 				} else {
-					log.Println("[Bad cmdSpec]")
+					log.Println("[Bad hkexsh.Session]")
 				}
 				return
 			}(conn)
