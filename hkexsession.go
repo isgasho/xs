@@ -16,6 +16,7 @@ import (
 type Session struct {
 	op         []byte
 	who        []byte
+	termtype   []byte // client initial $TERM
 	cmd        []byte
 	authCookie []byte
 	status     uint32 // exit status (0-255 is std UNIX status)
@@ -41,6 +42,14 @@ func (h Session) Who() []byte {
 
 func (h *Session) SetWho(w []byte) {
 	h.who = w
+}
+
+func (h Session) TermType() []byte {
+	return h.termtype
+}
+
+func (h *Session) SetTermType(t []byte) {
+	h.termtype = t
 }
 
 func (h Session) Cmd() []byte {
@@ -78,10 +87,11 @@ func (h *Session) SetStatus(s uint32) {
 	h.status = s
 }
 
-func NewSession(op, who, cmd, authcookie []byte, status uint32) *Session {
+func NewSession(op, who, ttype, cmd, authcookie []byte, status uint32) *Session {
 	return &Session{
 		op:         op,
 		who:        who,
+		termtype:   ttype,
 		cmd:        cmd,
 		authCookie: authcookie,
 		status:     status}

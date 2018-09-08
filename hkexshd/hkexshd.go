@@ -31,7 +31,7 @@ import (
 
 /* -------------------------------------------------------------- */
 // Perform a client->server copy
-func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus uint32) {
+func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus uint32) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -47,7 +47,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
-	os.Setenv("TERM", "vt102") // TODO: server or client option?
+	os.Setenv("TERM", ttype)
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -113,7 +113,7 @@ func runClientToServerCopyAs(who string, conn hkexnet.Conn, fpath string, chaffi
 }
 
 // Perform a server->client copy
-func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus uint32) {
+func runServerToClientCopyAs(who, ttype string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus uint32) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -129,7 +129,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
-	os.Setenv("TERM", "vt102") // TODO: server or client option?
+	os.Setenv("TERM", ttype)
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -198,7 +198,7 @@ func runServerToClientCopyAs(who string, conn hkexnet.Conn, srcPath string, chaf
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus uint32) {
+func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus uint32) {
 	var wg sync.WaitGroup
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
@@ -215,8 +215,7 @@ func runShellAs(who string, cmd string, interactive bool, conn hkexnet.Conn, cha
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
-	//os.Setenv("SHELL", "/bin/bash")
-	os.Setenv("TERM", "vt102") // TODO: server or client option?
+	os.Setenv("TERM", ttype)
 
 	var c *exec.Cmd
 	if interactive {
@@ -389,16 +388,16 @@ func main() {
 				//Otherwise data will be sitting in the channel that isn't
 				//passed down to the command handlers.
 				var rec hkexsh.Session
-				var len1, len2, len3, len4 uint32
+				var len1, len2, len3, len4, len5 uint32
 
-				n, err := fmt.Fscanf(hc, "%d %d %d %d\n", &len1, &len2, &len3, &len4)
-				log.Printf("hkexsh.Session read:%d %d %d %d\n", len1, len2, len3, len4)
+				n, err := fmt.Fscanf(hc, "%d %d %d %d %d\n", &len1, &len2, &len3, &len4, &len5)
+				log.Printf("hkexsh.Session read:%d %d %d %d %d\n", len1, len2, len3, len4, len5)
 
-				if err != nil || n < 4 {
+				if err != nil || n < 5 {
 					log.Println("[Bad hkexsh.Session fmt]")
 					return err
 				}
-				//fmt.Printf("  lens:%d %d %d %d\n", len1, len2, len3, len4)
+				//fmt.Printf("  lens:%d %d %d %d %d\n", len1, len2, len3, len4, len5)
 
 				tmp := make([]byte, len1, len1)
 				_, err = io.ReadFull(hc, tmp)
@@ -419,12 +418,20 @@ func main() {
 				tmp = make([]byte, len3, len3)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
+					log.Println("[Bad hkexsh.Session.TermType]")
+					return err
+				}
+				rec.SetTermType(tmp)
+
+				tmp = make([]byte, len4, len4)
+				_, err = io.ReadFull(hc, tmp)
+				if err != nil {
 					log.Println("[Bad hkexsh.Session.Cmd]")
 					return err
 				}
 				rec.SetCmd(tmp)
 
-				tmp = make([]byte, len4, len4)
+				tmp = make([]byte, len5, len5)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.AuthCookie]")
@@ -458,7 +465,7 @@ func main() {
 					hname := strings.Split(addr.String(), ":")[0]
 
 					log.Printf("[Running command for [%s@%s]]\n", rec.Who(), hname)
-					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.Cmd()), false, hc, chaffEnabled)
+					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
@@ -478,7 +485,7 @@ func main() {
 					utmpx := goutmp.Put_utmp(string(rec.Who()), hname)
 					defer func() { goutmp.Unput_utmp(utmpx) }()
 					goutmp.Put_lastlog_entry("hkexsh", string(rec.Who()), hname)
-					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.Cmd()), true, hc, chaffEnabled)
+					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), true, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
@@ -494,7 +501,7 @@ func main() {
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
-					runErr, cmdStatus := runClientToServerCopyAs(string(rec.Who()), hc, string(rec.Cmd()), chaffEnabled)
+					runErr, cmdStatus := runClientToServerCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
@@ -510,7 +517,7 @@ func main() {
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
-					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), hc, string(rec.Cmd()), chaffEnabled)
+					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					//fmt.Print("ServerToClient cmdStatus:", cmdStatus)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF

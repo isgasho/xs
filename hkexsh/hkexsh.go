@@ -81,9 +81,9 @@ func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, other
 
 			if i == len(a)-1 {
 				isDest = true
-				fmt.Println("remote path isDest")
+				//fmt.Println("remote path isDest")
 			}
-			fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "path:", fancyPath)
+			//fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "path:", fancyPath)
 		} else {
 			otherArgs = append(otherArgs, a[i])
 		}
@@ -366,7 +366,7 @@ func main() {
 
 	remoteUser, tmpHost, tmpPath, pathIsDest, otherArgs :=
 		parseNonSwitchArgs(flag.Args())
-	fmt.Println("otherArgs:", otherArgs)
+	//fmt.Println("otherArgs:", otherArgs)
 
 	// Set defaults if user doesn't specify user, path or port
 	var uname string
@@ -515,13 +515,13 @@ func main() {
 		runtime.GC()
 	}
 	
-	rec := hkexsh.NewSession(op, []byte(uname), []byte(cmdStr), []byte(authCookie),0)
-
-	_, err = fmt.Fprintf(conn, "%d %d %d %d\n",
-		len(rec.Op()), len(rec.Who()), len(rec.Cmd()), len(rec.AuthCookie(true)))
-
+	// Set up session params and send over to server
+	rec := hkexsh.NewSession(op, []byte(uname), []byte(os.Getenv("TERM")), []byte(cmdStr), []byte(authCookie),0)
+	_, err = fmt.Fprintf(conn, "%d %d %d %d %d\n",
+		len(rec.Op()), len(rec.Who()), len(rec.TermType()), len(rec.Cmd()), len(rec.AuthCookie(true)))
 	_, err = conn.Write(rec.Op())
 	_, err = conn.Write(rec.Who())
+	_, err = conn.Write(rec.TermType())
 	_, err = conn.Write(rec.Cmd())
 	_, err = conn.Write(rec.AuthCookie(true))
 
