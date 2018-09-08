@@ -16,10 +16,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/user"
 
-	"github.com/jameskeane/bcrypt"
 	hkexsh "blitter.com/go/hkexsh"
+	"github.com/jameskeane/bcrypt"
 )
 
 func main() {
@@ -38,12 +37,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	u, err := user.Lookup(userName)
-	if err != nil {
-		log.Printf("Invalid user %s\n", userName)
-		log.Fatal(err)
-	}
-	uname = u.Username
+	//u, err := user.Lookup(userName)
+	//if err != nil {
+	//	log.Printf("Invalid user %s\n", userName)
+	//	log.Fatal(err)
+	//}
+	//uname = u.Username
+	uname = userName
 
 	fmt.Printf("New Password:")
 	ab, err := hkexsh.ReadPassword(int(os.Stdin.Fd()))
@@ -92,15 +92,18 @@ func main() {
 
 	r.Comma = ':'
 	r.Comment = '#'
-	r.FieldsPerRecord = 4 // username:salt:authCookie:disallowedCmdList (a,b,...)
+	r.FieldsPerRecord = 3 // username:salt:authCookie [TODO:disallowedCmdList (a,b,...)]
 
 	records, err := r.ReadAll()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	recFound := false
 	for i, _ := range records {
 		//fmt.Println(records[i])
 		if records[i][0] == uname {
+			recFound = true
 			records[i][1] = salt
 			records[i][2] = hash
 		}
@@ -108,6 +111,10 @@ func main() {
 		//if records[i][0][0] == '!' {
 		//	records[i][0] = "#" + records[i][0]
 		//}
+	}
+	if !recFound {
+		newRec := []string{uname, salt, hash}
+		records = append(records, newRec)
 	}
 
 	outFile, err := ioutil.TempFile("", "hkexsh-passwd")
@@ -117,7 +124,7 @@ func main() {
 	w := csv.NewWriter(outFile)
 	w.Comma = ':'
 	//w.FieldsPerRecord = 4 // username:salt:authCookie:disallowedCmdList (a,b,...)
-	w.Write([]string{"#username", "salt", "authCookie", "disallowedCmdList"})
+	w.Write([]string{"#username", "salt", "authCookie"/*, "disallowedCmdList"*/})
 	w.WriteAll(records)
 	if err = w.Error(); err != nil {
 		log.Fatal(err)
