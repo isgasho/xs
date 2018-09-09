@@ -30,7 +30,7 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 
 	r.Comma = ':'
 	r.Comment = '#'
-	r.FieldsPerRecord = 4 // username:salt:authCookie:disallowedCmdList (a,b,...)
+	r.FieldsPerRecord = 3 // username:salt:authCookie [TODO:disallowedCmdList (a,b,...)]
 	for {
 		record, err := r.Read()
 		if err == io.EOF {
