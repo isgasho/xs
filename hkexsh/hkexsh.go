@@ -478,7 +478,7 @@ func main() {
 		}
 	}
 
-	conn, err := hkexnet.Dial("tcp", server, cAlg, hAlg)
+	conn, err := hkexnet.Dial("tcp", server, /*[kexAlg eg. "KEX_HERRADURA"], */ cAlg, hAlg)
 	if err != nil {
 		fmt.Println("Err!")
 		panic(err)

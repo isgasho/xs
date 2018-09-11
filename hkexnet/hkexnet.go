@@ -9,6 +9,14 @@
 
 package hkexnet
 
+// TODO:
+// If key exchange algs other than the experimental HerraduraKEx are to
+// be supported, the Dial() and Accept() methods should take a kex param,
+// specifying which to use; and the client/server negotiation must then
+// prefix the channel setup with this param over the wire in order to decide
+// which is in use.
+//
+
 // Implementation of HKEx-wrapped versions of the golang standard
 // net package interfaces, allowing clients and servers to simply replace
 // 'net.Dial' and 'net.Listen' with 'hkex.Dial' and 'hkex.Listen'
@@ -32,6 +40,17 @@ import (
 	"time"
 
 	"blitter.com/go/hkexsh/herradurakex"
+)
+
+// KEx type - sent from client to server in order to specify which
+// algo shall be used (eg., HerraduraKEx, [TODO: others...])
+type KEX uint8
+
+const (
+	KEX_HERRADURA = iota // this MUST be first for default if omitted in ctor
+	//KEX_FOO
+	//KEX_DH
+	//KEX_ETC
 )
 
 // const CSExtendedCode - extended (>255 UNIX exit status) codes
@@ -76,6 +95,7 @@ type (
 
 	// Conn is a HKex connection - a superset of net.Conn
 	Conn struct {
+		kex        KEX
 		m          *sync.Mutex
 		c          net.Conn // which also implements io.Reader, io.Writer, ...
 		h          *hkex.HerraduraKEx
@@ -146,6 +166,14 @@ func (hc *Conn) SetOpts(opts uint32) {
 func (hc *Conn) applyConnExtensions(extensions ...string) {
 	for _, s := range extensions {
 		switch s {
+		case "KEX_HERRADURA":
+			log.Println("[extension arg = KEX_HERRADURA]")
+			hc.kex = KEX_HERRADURA
+			break
+		//case "KEX_FOO":
+		//	log.Println("[extension arg = KEX_FOO]")
+		//	hc.kex = KEX_FOO
+		//	break
 		case "C_AES_256":
 			log.Println("[extension arg = C_AES_256]")
 			hc.cipheropts &= (0xFFFFFF00)
@@ -173,7 +201,9 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 	}
 }
 
-// Dial as net.Dial(), but with implicit HKEx PeerD read on connect
+// Dial as net.Dial(), but with implicit key exchange to set up secure
+// channel on connect
+//
 //   Can be called like net.Dial(), defaulting to C_AES_256/H_SHA256,
 //   or additional option arguments can be passed amongst the following:
 //
@@ -187,8 +217,16 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 		return nil, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
+	// NOTE: kex default of KEX_HERRADURA may be overridden by
+	// future extension args to applyConnExtensions(), which is
+	// called prior to Dial()
 	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint32), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
+
+	// TODO: Factor out ALL params following this to helpers for
+	// specific KEx algs
+	fmt.Fprintf(c, "%02x\n", hc.kex)
+	// --
 
 	// Send hkexnet.Conn parameters to remote side
 	// d is value for Herradura key exchange
@@ -326,8 +364,18 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(uint32), WinCh: make(chan WinSize, 1),
+	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(uint32), WinCh: make(chan WinSize, 1),
 		dBuf: new(bytes.Buffer)}
+
+	// TODO: Factor out ALL params following this to helpers for
+	// specific KEx algs
+	var kexAlg uint8
+	_, err = fmt.Fscanln(c, &kexAlg)
+	if err != nil {
+		return hc, err
+	}
+	log.Printf("[KEx alg: %v]\n", kexAlg)
+	// --
 
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
