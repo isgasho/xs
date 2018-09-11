@@ -318,7 +318,7 @@ func rejectUserMsg() string {
 // connection (app-specific, passed through to the server to use or
 // ignore at its discretion).
 func main() {
-	version := "0.1pre (NO WARRANTY)"
+	version := "0.2pre (NO WARRANTY)"
 	var vopt bool
 	var dbg bool
 	var shellMode bool // if true act as shell, else file copier

@@ -317,7 +317,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
-	version := "0.1pre (NO WARRANTY)"
+	version := "0.2pre (NO WARRANTY)"
 	var vopt bool
 	var chaffEnabled bool
 	var chaffFreqMin uint

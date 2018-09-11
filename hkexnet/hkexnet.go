@@ -16,6 +16,12 @@ package hkexnet
 // prefix the channel setup with this param over the wire in order to decide
 // which is in use.
 //
+// DESIGN PRINCIPLE: There shall be no protocol features which enable
+// downgrade attacks. The server shall have final authority to accept or
+// reject any and all proposed KEx and connection parameters proposed by
+// clients at setup. Action on denial shall be a simple server disconnect
+// with possibly a status code sent so client can determine why connection
+// was denied (compare to how failed auth is communicated to client).
 
 // Implementation of HKEx-wrapped versions of the golang standard
 // net package interfaces, allowing clients and servers to simply replace
