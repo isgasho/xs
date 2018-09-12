@@ -34,7 +34,14 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 	for {
 		record, err := r.Read()
 		if err == io.EOF {
-			break
+			// Use dummy entry if user not found
+			// (prevent user enumeration attack via obvious timing diff;
+			// ie., not attempting any auth at all)
+			record = []string{"$nosuchuser$",
+				"$2a$12$l0coBlRDNEJeQVl6GdEPbU",
+				"$2a$12$l0coBlRDNEJeQVl6GdEPbUC/xmuOANvqgmrMVum6S4i.EXPgnTXy6"}
+			username = "$nosuchuser$"
+			err = nil
 		}
 		if err != nil {
 			log.Fatal(err)
@@ -42,7 +49,7 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 
 		if username == record[0] {
 			tmp, _ := bcrypt.Hash(auth, record[1])
-			if tmp == record[2] {
+			if tmp == record[2] && username != "$nosuchuser$" {
 				valid = true
 			}
 			break
