@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -106,7 +107,8 @@ func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string,
 				// an ExitStatus() method with the same signature.
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 					exitStatus = uint32(status.ExitStatus())
-					log.Printf("Exit Status: %d", exitStatus)
+					err = errors.New("cmd returned nonzero status")
+					fmt.Printf("Exit Status: %d\n", exitStatus)
 				}
 			}
 		}
@@ -495,7 +497,7 @@ func main() {
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname)
 					token := GenAuthToken(string(rec.Who()), string(rec.ConnHost()))
-					tokenCmd := fmt.Sprintf("echo \"%s\" | tee ~/.hkexsh_id", token)
+					tokenCmd := fmt.Sprintf("echo \"%s\" | tee -a ~/.hkexsh_id", token)
 					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), tokenCmd, false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
@@ -554,10 +556,11 @@ func main() {
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						log.Printf("[Error spawning cp for %s@%s]\n", rec.Who(), hname)
+						log.Printf("[Error running cp for %s@%s]\n", rec.Who(), hname)
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
+					fmt.Println("cmdStatus:", cmdStatus)
 					hc.SetStatus(cmdStatus)
 				} else if rec.Op()[0] == 'S' {
 					// File copy (src) operation - server copy to client

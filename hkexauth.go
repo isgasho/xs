@@ -17,6 +17,7 @@ import (
 	"log"
 	"os/user"
 	"runtime"
+	"strings"
 
 	"github.com/jameskeane/bcrypt"
 )
@@ -69,6 +70,7 @@ func AuthUserByPasswd(username string, auth string, fname string) (valid bool, a
 }
 
 func AuthUserByToken(username string, connhostname string, auth string) (valid bool) {
+	auth = strings.TrimSpace(auth)
 	u, ue := user.Lookup(username)
 	if ue != nil {
 		return false
@@ -80,8 +82,25 @@ func AuthUserByToken(username string, connhostname string, auth string) (valid b
 		return false
 	}
 
-	if string(b) == auth {
-		return true
+	r := csv.NewReader(bytes.NewReader(b))
+
+	r.Comma = ':'
+	r.Comment = '#'
+	r.FieldsPerRecord = 2 // connhost:authtoken
+	for {
+		record, err := r.Read()
+		if err == io.EOF {
+			return false
+		}
+		record[0] = strings.TrimSpace(record[0])
+		record[1] = strings.TrimSpace(record[1])
+		fmt.Println("auth:", auth, "record:",
+			strings.Join([]string{record[0], record[1]}, ":"))
+
+		if (connhostname == record[0]) &&
+			(auth == strings.Join([]string{record[0], record[1]}, ":")) {
+			return true
+		}
 	}
 	return
 }

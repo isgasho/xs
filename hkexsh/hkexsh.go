@@ -320,7 +320,8 @@ func rejectUserMsg() string {
 func main() {
 	version := "0.2pre (NO WARRANTY)"
 	var vopt bool
-	var aopt bool
+	var aopt bool //login using authToken
+	var gopt bool //login via password, asking server to generate authToken
 	var dbg bool
 	var shellMode bool // if true act as shell, else file copier
 	var cAlg string
@@ -358,7 +359,8 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
-		flag.BoolVar(&aopt, "a", false, "return autologin token from server")
+		flag.BoolVar(&aopt, "a", false, "login using auth token")
+		flag.BoolVar(&gopt, "g", false, "ask server to generate authtoken")
 		shellMode = true
 		flag.Usage = UsageShell
 	} else {
@@ -445,20 +447,44 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	// See if we can log in via an auth token
-	u, _ := user.Current()
-	ab, aerr := ioutil.ReadFile(fmt.Sprintf("%s/.hkexsh_id", u.HomeDir))
-	if aerr == nil {
-		authCookie = string(ab)
-		// Security scrub
-		ab = nil
-		runtime.GC()
+	if aopt && gopt {
+		fmt.Fprintln(os.Stderr,
+			"Error: use -g first to generate an authtoken,",
+			" then -a to login using it.")
+		os.Exit(1)
+	}
+
+	if !gopt {
+		// See if we can log in via an auth token
+		u, _ := user.Current()
+		ab, aerr := ioutil.ReadFile(fmt.Sprintf("%s/.hkexsh_id", u.HomeDir))
+		if aerr == nil {
+			//authCookie = string(ab)
+			idx := strings.Index(string(ab), remoteHost)
+			if idx >= 0 {
+				ab = ab[idx:]
+			} else {
+				fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
+				os.Exit(1)
+			}
+			entries := strings.SplitN(string(ab), "\n", -1)
+			//if len(entries) > 0 {
+				fmt.Println("entries[0]:", entries[0])
+				authCookie = strings.TrimSpace(entries[0])
+			//} else {
+			//	fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
+			//	os.Exit(1)
+			//}
+			// Security scrub
+			ab = nil
+			runtime.GC()
+		}
 	}
 
 	if shellMode {
 		// We must make the decision about interactivity before Dial()
 		// as it affects chaffing behaviour. 20180805
-		if aopt {
+		if gopt {
 			op = []byte{'A'}
 			chaffFreqMin = 2
 			chaffFreqMax = 10
