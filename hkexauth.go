@@ -68,7 +68,7 @@ func AuthUserByPasswd(username string, auth string, fname string) (valid bool, a
 	return
 }
 
-func AuthUserByToken(username string, auth string) (valid bool) {
+func AuthUserByToken(username string, connhostname string, auth string) (valid bool) {
 	u, ue := user.Lookup(username)
 	if ue != nil {
 		return false

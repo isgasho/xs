@@ -366,7 +366,7 @@ func main() {
 	}
 	flag.Parse()
 
-	remoteUser, tmpHost, tmpPath, pathIsDest, otherArgs :=
+	remoteUser, remoteHost, tmpPath, pathIsDest, otherArgs :=
 		parseNonSwitchArgs(flag.Args())
 	//fmt.Println("otherArgs:", otherArgs)
 
@@ -379,8 +379,8 @@ func main() {
 		uname = remoteUser
 	}
 
-	if tmpHost != "" {
-		server = tmpHost + ":" + fmt.Sprintf("%d", port)
+	if remoteHost != "" {
+		server = remoteHost + ":" + fmt.Sprintf("%d", port)
 	}
 	if tmpPath == "" {
 		tmpPath = "."
@@ -533,17 +533,18 @@ func main() {
 	}
 
 	// Set up session params and send over to server
-	rec := hkexsh.NewSession(op, []byte(uname), []byte(os.Getenv("TERM")), []byte(cmdStr), []byte(authCookie), 0)
-	_, err = fmt.Fprintf(conn, "%d %d %d %d %d\n",
-		len(rec.Op()), len(rec.Who()), len(rec.TermType()), len(rec.Cmd()), len(rec.AuthCookie(true)))
+	rec := hkexsh.NewSession(op, []byte(uname), []byte(remoteHost), []byte(os.Getenv("TERM")), []byte(cmdStr), []byte(authCookie), 0)
+	_, err = fmt.Fprintf(conn, "%d %d %d %d %d %d\n",
+		len(rec.Op()), len(rec.Who()), len(rec.ConnHost()), len(rec.TermType()), len(rec.Cmd()), len(rec.AuthCookie(true)))
 	_, err = conn.Write(rec.Op())
 	_, err = conn.Write(rec.Who())
+	_, err = conn.Write(rec.ConnHost())
 	_, err = conn.Write(rec.TermType())
 	_, err = conn.Write(rec.Cmd())
 	_, err = conn.Write(rec.AuthCookie(true))
 
 	//Security scrub
-	authCookie = nil
+	authCookie = ""
 	runtime.GC()
 
 	// Read auth reply from server

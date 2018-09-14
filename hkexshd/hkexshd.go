@@ -221,7 +221,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 	os.Setenv("HOME", u.HomeDir)
 	os.Setenv("TERM", ttype)
 	os.Setenv("HKEXSH", "1")
-	
+
 	var c *exec.Cmd
 	if interactive {
 		c = exec.Command("/bin/bash", "-i", "-l")
@@ -316,11 +316,12 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 	return
 }
 
-func GenAuthToken(who string) string {
-	tokenA, e := os.Hostname()
-	if e != nil {
-		tokenA = "badhost"
-	}
+func GenAuthToken(who string, connhost string) string {
+	//tokenA, e := os.Hostname()
+	//if e != nil {
+	//	tokenA = "badhost"
+	//}
+	tokenA := connhost
 
 	tokenB := make([]byte, 64)
 	_, _ = rand.Read(tokenB)
@@ -404,16 +405,16 @@ func main() {
 				//Otherwise data will be sitting in the channel that isn't
 				//passed down to the command handlers.
 				var rec hkexsh.Session
-				var len1, len2, len3, len4, len5 uint32
+				var len1, len2, len3, len4, len5, len6 uint32
 
-				n, err := fmt.Fscanf(hc, "%d %d %d %d %d\n", &len1, &len2, &len3, &len4, &len5)
-				log.Printf("hkexsh.Session read:%d %d %d %d %d\n", len1, len2, len3, len4, len5)
+				n, err := fmt.Fscanf(hc, "%d %d %d %d %d %d\n", &len1, &len2, &len3, &len4, &len5, &len6)
+				log.Printf("hkexsh.Session read:%d %d %d %d %d %d\n", len1, len2, len3, len4, len5, len6)
 
-				if err != nil || n < 5 {
+				if err != nil || n < 6 {
 					log.Println("[Bad hkexsh.Session fmt]")
 					return err
 				}
-				//fmt.Printf("  lens:%d %d %d %d %d\n", len1, len2, len3, len4, len5)
+				//fmt.Printf("  lens:%d %d %d %d %d %d\n", len1, len2, len3, len4, len5, len6)
 
 				tmp := make([]byte, len1, len1)
 				_, err = io.ReadFull(hc, tmp)
@@ -434,12 +435,20 @@ func main() {
 				tmp = make([]byte, len3, len3)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
+					log.Println("[Bad hkexsh.Session.ConnHost]")
+					return err
+				}
+				rec.SetConnHost(tmp)
+
+				tmp = make([]byte, len4, len4)
+				_, err = io.ReadFull(hc, tmp)
+				if err != nil {
 					log.Println("[Bad hkexsh.Session.TermType]")
 					return err
 				}
 				rec.SetTermType(tmp)
 
-				tmp = make([]byte, len4, len4)
+				tmp = make([]byte, len5, len5)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.Cmd]")
@@ -447,7 +456,7 @@ func main() {
 				}
 				rec.SetCmd(tmp)
 
-				tmp = make([]byte, len5, len5)
+				tmp = make([]byte, len6, len6)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.AuthCookie]")
@@ -455,12 +464,12 @@ func main() {
 				}
 				rec.SetAuthCookie(tmp)
 
-				log.Printf("[hkexsh.Session: op:%c who:%s cmd:%s auth:****]\n",
-					rec.Op()[0], string(rec.Who()), string(rec.Cmd()))
+				log.Printf("[hkexsh.Session: op:%c who:%s connhost:%s cmd:%s auth:****]\n",
+					rec.Op()[0], string(rec.Who()), string(rec.ConnHost()), string(rec.Cmd()))
 
 				var valid bool
 				var allowedCmds string // Currently unused
-				if hkexsh.AuthUserByToken(string(rec.Who()), string(rec.AuthCookie(true))) {
+				if hkexsh.AuthUserByToken(string(rec.Who()), string(rec.ConnHost()), string(rec.AuthCookie(true))) {
 					valid = true
 				} else {
 					valid, allowedCmds = hkexsh.AuthUserByPasswd(string(rec.Who()), string(rec.AuthCookie(true)), "/etc/hkexsh.passwd")
@@ -485,7 +494,7 @@ func main() {
 					addr := hc.RemoteAddr()
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname)
-					token := GenAuthToken(string(rec.Who()))
+					token := GenAuthToken(string(rec.Who()), string(rec.ConnHost()))
 					tokenCmd := fmt.Sprintf("echo \"%s\" | tee ~/.hkexsh_id", token)
 					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), tokenCmd, false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
