@@ -11,15 +11,17 @@ package hkexsh
 import (
 	"bytes"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"os/user"
 	"runtime"
 
 	"github.com/jameskeane/bcrypt"
 )
 
-func AuthUser(username string, auth string, fname string) (valid bool, allowedCmds string) {
+func AuthUserByPasswd(username string, auth string, fname string) (valid bool, allowedCmds string) {
 	b, e := ioutil.ReadFile(fname)
 	if e != nil {
 		valid = false
@@ -63,5 +65,23 @@ func AuthUser(username string, auth string, fname string) (valid bool, allowedCm
 	r = nil
 	runtime.GC()
 
+	return
+}
+
+func AuthUserByToken(username string, auth string) (valid bool) {
+	u, ue := user.Lookup(username)
+	if ue != nil {
+		return false
+	}
+
+	b, e := ioutil.ReadFile(fmt.Sprintf("%s/.hkexsh_id", u.HomeDir))
+	if e != nil {
+		log.Printf("INFO: Cannot read %s/.hkexsh_id\n", u.HomeDir)
+		return false
+	}
+
+	if string(b) == auth {
+		return true
+	}
 	return
 }

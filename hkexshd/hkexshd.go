@@ -9,7 +9,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -48,6 +50,7 @@ func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string,
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
 	os.Setenv("TERM", ttype)
+	os.Setenv("HKEXSH", "1")
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -130,6 +133,7 @@ func runServerToClientCopyAs(who, ttype string, conn hkexnet.Conn, srcPath strin
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
 	os.Setenv("TERM", ttype)
+	os.Setenv("HKEXSH", "1")
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -216,7 +220,8 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir)
 	os.Setenv("TERM", ttype)
-
+	os.Setenv("HKEXSH", "1")
+	
 	var c *exec.Cmd
 	if interactive {
 		c = exec.Command("/bin/bash", "-i", "-l")
@@ -309,6 +314,17 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 		wg.Wait() // Wait on pty->stdout completion to client
 	}
 	return
+}
+
+func GenAuthToken(who string) string {
+	tokenA, e := os.Hostname()
+	if e != nil {
+		tokenA = "badhost"
+	}
+
+	tokenB := make([]byte, 64)
+	_, _ = rand.Read(tokenB)
+	return fmt.Sprintf("%s:%s", tokenA, hex.EncodeToString(tokenB))
 }
 
 // Demo of a simple server that listens and spawns goroutines for each
@@ -442,7 +458,13 @@ func main() {
 				log.Printf("[hkexsh.Session: op:%c who:%s cmd:%s auth:****]\n",
 					rec.Op()[0], string(rec.Who()), string(rec.Cmd()))
 
-				valid, allowedCmds := hkexsh.AuthUser(string(rec.Who()), string(rec.AuthCookie(true)), "/etc/hkexsh.passwd")
+				var valid bool
+				var allowedCmds string // Currently unused
+				if hkexsh.AuthUserByToken(string(rec.Who()), string(rec.AuthCookie(true))) {
+					valid = true
+				} else {
+					valid, allowedCmds = hkexsh.AuthUserByPasswd(string(rec.Who()), string(rec.AuthCookie(true)), "/etc/hkexsh.passwd")
+				}
 
 				// Security scrub
 				rec.ClearAuthCookie()
@@ -458,7 +480,24 @@ func main() {
 
 				log.Printf("[allowedCmds:%s]\n", allowedCmds)
 
-				if rec.Op()[0] == 'c' {
+				if rec.Op()[0] == 'A' {
+					// Generate automated login token
+					addr := hc.RemoteAddr()
+					hname := strings.Split(addr.String(), ":")[0]
+					log.Printf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname)
+					token := GenAuthToken(string(rec.Who()))
+					tokenCmd := fmt.Sprintf("echo \"%s\" | tee ~/.hkexsh_id", token)
+					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), tokenCmd, false, hc, chaffEnabled)
+					// Returned hopefully via an EOF or exit/logout;
+					// Clear current op so user can enter next, or EOF
+					rec.SetOp([]byte{0})
+					if runErr != nil {
+						log.Printf("[Error generating autologin token for %s@%s]\n", rec.Who(), hname)
+					} else {
+						log.Printf("[Autologin token generation completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
+						hc.SetStatus(cmdStatus)
+					}
+				} else if rec.Op()[0] == 'c' {
 					// Non-interactive command
 					addr := hc.RemoteAddr()
 					//hname := goutmp.GetHost(addr.String())
@@ -470,9 +509,9 @@ func main() {
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						log.Printf("[Error spawning cmd for %s@%s]\n", rec.Who, hname)
+						log.Printf("[Error spawning cmd for %s@%s]\n", rec.Who(), hname)
 					} else {
-						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who, hname, cmdStatus)
+						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 						hc.SetStatus(cmdStatus)
 					}
 				} else if rec.Op()[0] == 's' {

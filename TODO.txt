@@ -5,6 +5,8 @@ Chaff Improvements
 - Mimicry of hand-typed traffic for chaff on interactive sessions
 - Client-input chaff file data (ie., Moby Dick)
 
+KEx: Look at ECIES: https://godoc.org/github.com/bitherhq/go-bither/crypto/ecies
+
 Architecture
 (DONE) - Move hkexnet components other than key exchange into a proper hkex package
   (ie., hkexsh imports hkex) - hkex should be usable for other client/svr utils,

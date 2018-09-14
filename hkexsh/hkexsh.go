@@ -320,6 +320,7 @@ func rejectUserMsg() string {
 func main() {
 	version := "0.2pre (NO WARRANTY)"
 	var vopt bool
+	var aopt bool
 	var dbg bool
 	var shellMode bool // if true act as shell, else file copier
 	var cAlg string
@@ -345,7 +346,7 @@ func main() {
 	flag.StringVar(&cAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "m", "H_SHA256", "`hmac` [\"H_SHA256\"]")
 	flag.UintVar(&port, "p", 2000, "`port`")
-	flag.StringVar(&authCookie, "a", "", "auth cookie")
+	//flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
 	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt `freq` min (msecs)")
 	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt `freq` max (msecs)")
@@ -357,6 +358,7 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
+		flag.BoolVar(&aopt, "a", false, "return autologin token from server")
 		shellMode = true
 		flag.Usage = UsageShell
 	} else {
@@ -443,10 +445,24 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
+	// See if we can log in via an auth token
+	u, _ := user.Current()
+	ab, aerr := ioutil.ReadFile(fmt.Sprintf("%s/.hkexsh_id", u.HomeDir))
+	if aerr == nil {
+		authCookie = string(ab)
+		// Security scrub
+		ab = nil
+		runtime.GC()
+	}
+
 	if shellMode {
 		// We must make the decision about interactivity before Dial()
 		// as it affects chaffing behaviour. 20180805
-		if len(cmdStr) == 0 {
+		if aopt {
+			op = []byte{'A'}
+			chaffFreqMin = 2
+			chaffFreqMax = 10
+		} else if len(cmdStr) == 0 {
 			op = []byte{'s'}
 			isInteractive = true
 		} else {
@@ -467,20 +483,20 @@ func main() {
 			// client->server file copy
 			// src file list is in copySrc
 			op = []byte{'D'}
-			fmt.Println("client->server copy:", string(copySrc), "->", copyDst)
+			//fmt.Println("client->server copy:", string(copySrc), "->", copyDst)
 			cmdStr = copyDst
 		} else {
 			// server->client file copy
 			// remote src file(s) in copyDsr
 			op = []byte{'S'}
-			fmt.Println("server->client copy:", string(copySrc), "->", copyDst)
+			//fmt.Println("server->client copy:", string(copySrc), "->", copyDst)
 			cmdStr = string(copySrc)
 		}
 	}
 
-	conn, err := hkexnet.Dial("tcp", server, /*[kexAlg eg. "KEX_HERRADURA"], */ cAlg, hAlg)
+	conn, err := hkexnet.Dial("tcp", server /*[kexAlg eg. "KEX_HERRADURA"], */, cAlg, hAlg)
 	if err != nil {
-		fmt.Println("Err!")
+		fmt.Println(err)
 		panic(err)
 	}
 	defer conn.Close()
@@ -514,9 +530,9 @@ func main() {
 		ab = nil
 		runtime.GC()
 	}
-	
+
 	// Set up session params and send over to server
-	rec := hkexsh.NewSession(op, []byte(uname), []byte(os.Getenv("TERM")), []byte(cmdStr), []byte(authCookie),0)
+	rec := hkexsh.NewSession(op, []byte(uname), []byte(os.Getenv("TERM")), []byte(cmdStr), []byte(authCookie), 0)
 	_, err = fmt.Fprintf(conn, "%d %d %d %d %d\n",
 		len(rec.Op()), len(rec.Who()), len(rec.TermType()), len(rec.Cmd()), len(rec.AuthCookie(true)))
 	_, err = conn.Write(rec.Op())
@@ -544,8 +560,8 @@ func main() {
 		if shellMode {
 			doShellMode(isInteractive, conn, oldState, rec)
 		} else { // copyMode
-				_, s := doCopyMode(conn, pathIsDest, fileArgs, rec)
-				rec.SetStatus(s)
+			_, s := doCopyMode(conn, pathIsDest, fileArgs, rec)
+			rec.SetStatus(s)
 		}
 
 		if rec.Status() != 0 {
