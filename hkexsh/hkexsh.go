@@ -519,6 +519,7 @@ func main() {
 	}
 
 	if len(authCookie) == 0 {
+		//No auth token, prompt for password
 		fmt.Printf("Gimme cookie:")
 		ab, err := hkexsh.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Printf("\r\n")
@@ -540,6 +541,10 @@ func main() {
 	_, err = conn.Write(rec.TermType())
 	_, err = conn.Write(rec.Cmd())
 	_, err = conn.Write(rec.AuthCookie(true))
+
+	//Security scrub
+	authCookie = nil
+	runtime.GC()
 
 	// Read auth reply from server
 	authReply := make([]byte, 1) // bool: 0 = fail, 1 = pass

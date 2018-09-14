@@ -11,11 +11,18 @@ Architecture
 (DONE) - Move hkexnet components other than key exchange into a proper hkex package
   (ie., hkexsh imports hkex) - hkex should be usable for other client/svr utils,
   ala 'hkex-netcat')
+  (parts split out into hkexnet/*, hkexsession.go)
 - Make KEx fully-pluggable: isolate all code to do with Herradura into a
   KEx-neutral pkg so it can be swapped out for other methods (eg., DH etc.)
 
 Features
-- Support for hkcp (hkex-cp) - secure file copy protocol
+(DONE) - Support for hkcp (hkex-cp) - secure file copy protocol
+- (IN PROGRESS) auth tokens to allow scripted hkexsh/hkexcp use
+  * ~/.hkexsh_id file with multiple (host:token) entries
+    (Currently only one supported - need to support multiple lines for
+     multiple dest servers; also consider client sending host/ip used
+     to connect to server, so it can ensure the auth token matches that
+     used as servers can potentially be reached by multiple hostnames/IPs)
 - hktun - tunnelling - multiple tunnel sessions co-existing w/shell sessions
 
 Alternate transports for hkexsh.Conn - HTTP-mimicking traffic, ICMP, ... ?
