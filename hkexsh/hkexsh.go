@@ -480,7 +480,9 @@ func main() {
 		if aerr == nil {
 			//authCookie = string(ab)
 			idx := strings.Index(string(ab), remoteHost)
+			//fmt.Printf("auth entry idx:%d\n", idx)
 			if idx >= 0 {
+				fmt.Fprintln(os.Stderr, "[authtoken]")
 				ab = ab[idx:]
 				entries := strings.SplitN(string(ab), "\n", -1)
 				//if len(entries) > 0 {
@@ -494,8 +496,10 @@ func main() {
 				ab = nil
 				runtime.GC()
 			} else {
-				fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
+				fmt.Fprintln(os.Stderr, "[no authtoken, use -g to request one from server]")
 			}
+		} else {
+			log.Printf("[cannot read %s/.hkexsh_id]\n", u.HomeDir)
 		}
 	}
 
@@ -503,6 +507,7 @@ func main() {
 		// We must make the decision about interactivity before Dial()
 		// as it affects chaffing behaviour. 20180805
 		if gopt {
+			fmt.Fprintln(os.Stderr, "[requesting authtoken from server]")
 			op = []byte{'A'}
 			chaffFreqMin = 2
 			chaffFreqMax = 10
