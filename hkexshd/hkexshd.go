@@ -352,7 +352,16 @@ func GenAuthToken(who string, connhost string) string {
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
-	version := "0.2pre (NO WARRANTY)"
+	// This string is purely arbitrary, and is based on the
+	// author's current impression of how near (and far) this
+	// code is to being useful in the real world.
+	// Version 1.0 is an idealistic fever-dream, filled with
+	// cryptographically-secure rainbows and unicorns flying
+	// high above the clouds, ignoring various government
+	// TLAs who shake their fists impotently at the happy
+	// scene above, where all communicate securely beyond their reach.
+	version := "0.5pre (NO WARRANTY)"
+	
 	var vopt bool
 	var chaffEnabled bool
 	var chaffFreqMin uint
