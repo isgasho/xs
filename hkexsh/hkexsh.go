@@ -10,6 +10,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -125,7 +126,6 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 			} else {
 				cmdArgs = append(cmdArgs, "-C", dirTmp, fileTmp)
 			}
-			//cmdArgs = append(cmdArgs, v)
 		}
 
 		log.Printf("[%v %v]\n", cmdName, cmdArgs)
@@ -142,9 +142,24 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 
 		// Start the command (no pty)
 		err = c.Start() // returns immediately
+		/////////////
+		// NOTE: There is, apparently, a bug in Go stdlib here. Start()
+		// can actually return immediately, on a command which *does*
+		// start but exits quickly, with c.Wait() error
+		// "c.Wait status: exec: not started".
+		// As in this example, attempting a client->server copy to
+		// a nonexistent remote dir (it's tar exiting right away, exitStatus
+		// 2, stderr
+		// /bin/tar -xz -C /home/someuser/nosuchdir
+		// stderr: fork/exec /bin/tar: no such file or directory
+		//
+		// In this case, c.Wait() won't give us the real
+		// exit status (is it lost?).
+		/////////////
 		if err != nil {
-			fmt.Println(err)
-			//log.Fatal(err)
+			fmt.Println("cmd exited immediately. Cannot get cmd.Wait().ExitStatus()")
+			err = errors.New("cmd exited prematurely")
+			exitStatus = uint32(2)
 		} else {
 			if err = c.Wait(); err != nil {
 				if exiterr, ok := err.(*exec.ExitError); ok {
@@ -156,17 +171,30 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 					// an ExitStatus() method with the same signature.
 					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 						exitStatus = uint32(status.ExitStatus())
-						log.Printf("Exit Status: %d", exitStatus) //#
 						fmt.Print(stdErrBuffer)
+						fmt.Printf("Exit Status: %d\n", exitStatus) //#
 					}
 				}
 			}
-			//fmt.Println("*** client->server cp finished ***")
-			// Signal other end transfer is complete
+			// send CSOExitStatus to inform remote (server) end cp is done
+			log.Println("Sending local exitStatus:", exitStatus)
+			r := make([]byte, 4)
+			binary.BigEndian.PutUint32(r, exitStatus)
+			conn.WritePacket(r, hkexnet.CSOExitStatus)
+
+			// Do a final read for remote's exit status
 			s := make([]byte, 4)
-			binary.BigEndian.PutUint32(s, rec.Status())
-			conn.WritePacket(s, hkexnet.CSOExitStatus)
-			_, _ = conn.Read(nil /*ackByte*/)
+			_, remErr := conn.Read(s)
+			if remErr != io.EOF && !strings.Contains(remErr.Error(), "use of closed network") {
+				fmt.Printf("*** remote status Read() failed: %v\n", remErr)
+			}
+
+			// If local side status was OK, use remote side's status
+			if exitStatus == 0 {
+				exitStatus = conn.GetStatus()
+				log.Println("Received remote exitStatus:", exitStatus)
+			}
+			log.Printf("*** client->server cp finished , status %d ***\n", conn.GetStatus())
 		}
 	} else {
 		log.Println("remote filepath:", string(rec.Cmd()), "local files:", files)
@@ -215,7 +243,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 			if exitStatus == 0 {
 				exitStatus = uint32(conn.GetStatus())
 			}
-			//fmt.Println("*** server->client cp finished ***")
+			fmt.Printf("*** server->client cp finished, status %d ***\n", conn.GetStatus())
 		}
 	}
 	return
@@ -320,7 +348,6 @@ func rejectUserMsg() string {
 func main() {
 	version := "0.2pre (NO WARRANTY)"
 	var vopt bool
-	var aopt bool //login using authToken
 	var gopt bool //login via password, asking server to generate authToken
 	var dbg bool
 	var shellMode bool // if true act as shell, else file copier
@@ -359,7 +386,6 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
-		flag.BoolVar(&aopt, "a", false, "login using auth token")
 		flag.BoolVar(&gopt, "g", false, "ask server to generate authtoken")
 		shellMode = true
 		flag.Usage = UsageShell
@@ -447,13 +473,6 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	if aopt && gopt {
-		fmt.Fprintln(os.Stderr,
-			"Error: use -g first to generate an authtoken,",
-			" then -a to login using it.")
-		os.Exit(1)
-	}
-
 	if !gopt {
 		// See if we can log in via an auth token
 		u, _ := user.Current()
@@ -469,8 +488,8 @@ func main() {
 			}
 			entries := strings.SplitN(string(ab), "\n", -1)
 			//if len(entries) > 0 {
-				fmt.Println("entries[0]:", entries[0])
-				authCookie = strings.TrimSpace(entries[0])
+			//fmt.Println("entries[0]:", entries[0])
+			authCookie = strings.TrimSpace(entries[0])
 			//} else {
 			//	fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
 			//	os.Exit(1)
@@ -597,7 +616,7 @@ func main() {
 		}
 
 		if rec.Status() != 0 {
-			fmt.Fprintln(os.Stderr, "Remote end exited with status:", rec.Status())
+			fmt.Fprintln(os.Stderr, "Session exited with status:", rec.Status())
 		}
 	}
 

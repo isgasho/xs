@@ -92,9 +92,25 @@ func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string,
 	// Start the command (no pty)
 	log.Printf("[%v %v]\n", cmdName, cmdArgs)
 	err = c.Start() // returns immediately
+	/////////////
+	// NOTE: There is, apparently, a bug in Go stdlib here. Start()
+	// can actually return immediately, on a command which *does*
+	// start but exits quickly, with c.Wait() error
+	// "c.Wait status: exec: not started".
+	// As in this example, attempting a client->server copy to
+	// a nonexistent remote dir (it's tar exiting right away, exitStatus
+	// 2, stderr
+	// /bin/tar -xz -C /home/someuser/nosuchdir
+	// stderr: fork/exec /bin/tar: no such file or directory
+	//
+	// In this case, c.Wait() won't give us the real
+	// exit status (is it lost?).
+	/////////////
 	if err != nil {
-		log.Printf("Command finished with error: %v", err)
-		return err, hkexnet.CSEExecFail // !?
+		log.Println("cmd exited immediately. Cannot get cmd.Wait().ExitStatus()")
+		err = errors.New("cmd exited prematurely")
+		//exitStatus = uint32(254)
+		exitStatus = hkexnet.CSEExecFail
 	} else {
 		if err := c.Wait(); err != nil {
 			//fmt.Println("*** c.Wait() done ***")
@@ -108,13 +124,13 @@ func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string,
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 					exitStatus = uint32(status.ExitStatus())
 					err = errors.New("cmd returned nonzero status")
-					fmt.Printf("Exit Status: %d\n", exitStatus)
+					log.Printf("Exit Status: %d\n", exitStatus)
 				}
 			}
 		}
-		//fmt.Println("*** client->server cp finished ***")
-		return
+		log.Println("*** client->server cp finished ***")
 	}
+	return
 }
 
 // Perform a server->client copy
@@ -259,7 +275,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 				log.Printf("[Setting term size to: %v %v]\n", sz.Rows, sz.Cols)
 				pty.Setsize(ptmx, &pty.Winsize{Rows: sz.Rows, Cols: sz.Cols})
 			}
-			fmt.Println("*** WinCh goroutine done ***")
+			log.Println("*** WinCh goroutine done ***")
 		}()
 
 		// Copy stdin to the pty.. (bgnd goroutine)
@@ -416,7 +432,6 @@ func main() {
 					log.Println("[Bad hkexsh.Session fmt]")
 					return err
 				}
-				//fmt.Printf("  lens:%d %d %d %d %d %d\n", len1, len2, len3, len4, len5, len6)
 
 				tmp := make([]byte, len1, len1)
 				_, err = io.ReadFull(hc, tmp)
@@ -560,8 +575,13 @@ func main() {
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
-					fmt.Println("cmdStatus:", cmdStatus)
 					hc.SetStatus(cmdStatus)
+
+					// Send CSOExitStatus *before* client closes channel
+					s := make([]byte, 4)
+					binary.BigEndian.PutUint32(s, cmdStatus)
+					log.Printf("** cp writing closeStat %d at Close()\n", cmdStatus)
+					hc.WritePacket(s, hkexnet.CSOExitStatus)
 				} else if rec.Op()[0] == 'S' {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
@@ -569,7 +589,6 @@ func main() {
 					hname := strings.Split(addr.String(), ":")[0]
 					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
 					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
-					//fmt.Print("ServerToClient cmdStatus:", cmdStatus)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
@@ -579,12 +598,8 @@ func main() {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
 					hc.SetStatus(cmdStatus)
-					// Signal other end transfer is complete
-					s := make([]byte, 4)
-					binary.BigEndian.PutUint32(s, cmdStatus)
-					hc.WritePacket(s, hkexnet.CSOExitStatus)
 					//fmt.Println("Waiting for EOF from other end.")
-					_, _ = hc.Read(nil /*ackByte*/)
+					//_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
 				} else {
 					log.Println("[Bad hkexsh.Session]")

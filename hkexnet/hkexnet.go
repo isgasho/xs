@@ -62,11 +62,12 @@ const (
 // const CSExtendedCode - extended (>255 UNIX exit status) codes
 // This indicate channel-related or internal errors
 const (
-	CSEBadAuth     = 1024 // Failed login password
-	CSETruncCSO           // No CSOExitStatus in payload
-	CSEStillOpen          // Channel closed unexpectedly
-	CSEExecFail           // cmd.Start() (exec) failed
-	CSEPtyExecFail        // pty.Start() (exec w/pty) failed
+	CSENone        = 32 + iota
+	CSEBadAuth     // Failed login password
+	CSETruncCSO    // No CSOExitStatus in payload
+	CSEStillOpen   // Channel closed unexpectedly
+	CSEExecFail    // cmd.Start() (exec) failed
+	CSEPtyExecFail // pty.Start() (exec w/pty) failed
 )
 
 const (
@@ -128,7 +129,6 @@ func (hc Conn) GetStatus() uint32 {
 
 func (hc *Conn) SetStatus(stat uint32) {
 	*hc.closeStat = stat
-	//fmt.Println("closeStat:", *hc.closeStat)
 	log.Println("closeStat:", *hc.closeStat)
 }
 
@@ -170,6 +170,12 @@ func (hc *Conn) SetOpts(opts uint32) {
 }
 
 func (hc *Conn) applyConnExtensions(extensions ...string) {
+	//fmt.Printf("CSENone:%d CSEBadAuth:%d CSETruncCSO:%d CSEStillOpen:%d CSEExecFail:%d CSEPtyExecFail:%d\n",
+	//	CSENone, CSEBadAuth, CSETruncCSO, CSEStillOpen, CSEExecFail, CSEPtyExecFail)
+
+	//fmt.Printf("CSONone:%d  CSOHmacInvalid:%d CSOTermSize:%d CSOExitStatus:%d CSOChaff:%d\n",
+	//	CSONone, CSOHmacInvalid, CSOTermSize, CSOExitStatus, CSOChaff)
+
 	for _, s := range extensions {
 		switch s {
 		case "KEX_HERRADURA":
@@ -320,6 +326,7 @@ func (hc *Conn) Close() (err error) {
 	hc.DisableChaff()
 	s := make([]byte, 4)
 	binary.BigEndian.PutUint32(s, *hc.closeStat)
+	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
 	hc.WritePacket(s, CSOExitStatus)
 	err = hc.c.Close()
 	log.Println("[Conn Closing]")
@@ -479,12 +486,10 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
-			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				//fmt.Println("[1]unexpected Read() err:", err)
-				log.Println("[1]unexpected Read() err:", err)
-			} else {
-				//fmt.Println("[Client hung up]")
+			if err == io.EOF || strings.HasSuffix(err.Error(), "use of closed network connection") {
 				log.Println("[Client hung up]")
+			} else {
+				log.Println(err)
 			}
 			return 0, err
 		}
@@ -527,7 +532,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		decryptN, err := rs.Read(payloadBytes)
 		log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(payloadBytes[:n]))
 		if err != nil {
-			//fmt.Print(err)
+			log.Println("hkexnet.Read():", err)
 			//panic(err)
 		} else {
 
@@ -541,15 +546,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			} else if ctrlStatOp == CSOExitStatus {
 				if len(payloadBytes) > 0 {
 					hc.SetStatus(binary.BigEndian.Uint32(payloadBytes))
-					//!// If remote end is closing with an error, reply we're closing ours
-					//!if hc.GetStatus() != 0 {
-					//!	log.Print("CSOExitStatus:", hc.GetStatus())
-					hc.Close()
-					//!}
 				} else {
 					log.Println("[truncated payload, cannot determine CSOExitStatus]")
-					*hc.closeStat = CSETruncCSO
+					hc.SetStatus(CSETruncCSO)
 				}
+				hc.Close()
 			} else {
 				hc.dBuf.Write(payloadBytes)
 				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
@@ -595,11 +596,11 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
 	var hmacOut []uint8
 	var payloadLen uint32
-	
+
 	if hc.m == nil || hc.wm == nil {
-			return 0, errors.New("Secure chan not ready for writing")
+		return 0, errors.New("Secure chan not ready for writing")
 	}
-	
+
 	// N.B. Originally this Lock() surrounded only the
 	// calls to binary.Write(hc.c ..) however there appears
 	// to be some other unshareable state in the Conn
@@ -609,7 +610,6 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	// Would be nice to determine if the mutex scope
 	// could be tightened.
 	hc.m.Lock()
-	//fmt.Printf("--== TOTAL payloadLen (b):%d\n", len(b))
 	payloadLen = uint32(len(b))
 	//!fmt.Printf("  --== payloadLen:%d\n", payloadLen)
 	log.Printf("  :>ptext:\r\n%s\r\n", hex.Dump(b[0:payloadLen]))
