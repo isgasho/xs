@@ -94,8 +94,8 @@ func AuthUserByToken(username string, connhostname string, auth string) (valid b
 		}
 		record[0] = strings.TrimSpace(record[0])
 		record[1] = strings.TrimSpace(record[1])
-		fmt.Println("auth:", auth, "record:",
-			strings.Join([]string{record[0], record[1]}, ":"))
+		//fmt.Println("auth:", auth, "record:",
+		//	strings.Join([]string{record[0], record[1]}, ":"))
 
 		if (connhostname == record[0]) &&
 			(auth == strings.Join([]string{record[0], record[1]}, ":")) {

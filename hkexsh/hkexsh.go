@@ -482,21 +482,20 @@ func main() {
 			idx := strings.Index(string(ab), remoteHost)
 			if idx >= 0 {
 				ab = ab[idx:]
+				entries := strings.SplitN(string(ab), "\n", -1)
+				//if len(entries) > 0 {
+				//fmt.Println("entries[0]:", entries[0])
+				authCookie = strings.TrimSpace(entries[0])
+				//} else {
+				//	fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
+				//	os.Exit(1)
+				//}
+				// Security scrub
+				ab = nil
+				runtime.GC()
 			} else {
 				fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
-				os.Exit(1)
 			}
-			entries := strings.SplitN(string(ab), "\n", -1)
-			//if len(entries) > 0 {
-			//fmt.Println("entries[0]:", entries[0])
-			authCookie = strings.TrimSpace(entries[0])
-			//} else {
-			//	fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
-			//	os.Exit(1)
-			//}
-			// Security scrub
-			ab = nil
-			runtime.GC()
 		}
 	}
 
