@@ -29,20 +29,6 @@ import (
 	_ "crypto/sha256"
 )
 
-// Available ciphers for hkex.Conn
-const (
-	CAlgAES256     = iota
-	CAlgTwofish128 // golang.org/x/crypto/twofish
-	CAlgBlowfish64 // golang.org/x/crypto/blowfish
-	CAlgNoneDisallowed
-)
-
-// Available HMACs for hkex.Conn (TODO: not currently used)
-const (
-	HmacSHA256 = iota
-	HmacNoneDisallowed
-)
-
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */

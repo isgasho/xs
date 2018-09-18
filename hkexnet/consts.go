@@ -13,9 +13,10 @@ const (
 	//KEX_DH
 	//KEX_ETC
 )
+// Sent from client to server in order to specify which
+// algo shall be used (eg., HerraduraKEx, [TODO: others...])
+type KEXAlg uint8
 
-// const CSExtendedCode - extended (>255 UNIX exit status) codes
-// This indicate channel-related or internal errors
 const (
 	CSENone        = 32 + iota
 	CSEBadAuth     // Failed login password
@@ -24,6 +25,9 @@ const (
 	CSEExecFail    // cmd.Start() (exec) failed
 	CSEPtyExecFail // pty.Start() (exec w/pty) failed
 )
+// Extended (>255 UNIX exit status) codes
+// This indicate channel-related or internal errors
+type CSExtendedCode uint32
 
 const (
 	CSONone        = iota // No error, normal packet
@@ -32,6 +36,23 @@ const (
 	CSOExitStatus         // Remote cmd exit status
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
+// Channel status type
+type CSOType uint32
 
 const MAX_PAYLOAD_LEN = 4*1024*1024*1024 - 1
 
+const (
+	CAlgAES256     = iota
+	CAlgTwofish128 // golang.org/x/crypto/twofish
+	CAlgBlowfish64 // golang.org/x/crypto/blowfish
+	CAlgNoneDisallowed
+)
+// Available ciphers for hkex.Conn
+type CSCipherAlg uint32
+
+const (
+	HmacSHA256 = iota
+	HmacNoneDisallowed
+)
+// Available HMACs for hkex.Conn (TODO: not currently used)
+type CSHmacAlg uint32

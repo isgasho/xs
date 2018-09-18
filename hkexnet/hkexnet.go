@@ -48,10 +48,6 @@ import (
 	"blitter.com/go/hkexsh/herradurakex"
 )
 
-// KEx type - sent from client to server in order to specify which
-// algo shall be used (eg., HerraduraKEx, [TODO: others...])
-type KEX uint8
-
 /*---------------------------------------------------------------------*/
 
 type (
@@ -74,7 +70,7 @@ type (
 
 	// Conn is a HKex connection - a superset of net.Conn
 	Conn struct {
-		kex        KEX // KEX alg (typedef uint8)
+		kex        KEXAlg
 		m          *sync.Mutex
 		c          net.Conn           // which also implements io.Reader, io.Writer, ...
 		h          *hkex.HerraduraKEx // TODO: make an interface?
@@ -86,7 +82,7 @@ type (
 
 		chaff ChaffConfig
 
-		closeStat *uint32       // close status (CSOExitStatus)
+		closeStat *CSOType       // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
 		rm        hash.Hash
 		w         cipher.Stream //write cipherStream
@@ -95,11 +91,11 @@ type (
 	}
 )
 
-func (hc Conn) GetStatus() uint32 {
+func (hc Conn) GetStatus() CSOType {
 	return *hc.closeStat
 }
 
-func (hc *Conn) SetStatus(stat uint32) {
+func (hc *Conn) SetStatus(stat CSOType) {
 	*hc.closeStat = stat
 	log.Println("closeStat:", *hc.closeStat)
 }
@@ -263,7 +259,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	// NOTE: kex default of KEX_HERRADURA may be overridden by
 	// future extension args to applyConnExtensions(), which is
 	// called prior to Dial()
-	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(uint32), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// TODO: Factor out ALL params following this to helpers for
@@ -297,7 +293,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 func (hc *Conn) Close() (err error) {
 	hc.DisableChaff()
 	s := make([]byte, 4)
-	binary.BigEndian.PutUint32(s, *hc.closeStat)
+	binary.BigEndian.PutUint32(s, uint32(*hc.closeStat))
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
 	hc.WritePacket(s, CSOExitStatus)
 	err = hc.c.Close()
@@ -395,13 +391,13 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(uint32), cipheropts: 0, opts: 0,
+		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
 			r: nil, w: nil}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(uint32), WinCh: make(chan WinSize, 1),
+	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
 		dBuf: new(bytes.Buffer)}
 
 	// TODO: Factor out ALL params following this to helpers for
@@ -517,7 +513,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				hc.WinCh <- WinSize{hc.Rows, hc.Cols}
 			} else if ctrlStatOp == CSOExitStatus {
 				if len(payloadBytes) > 0 {
-					hc.SetStatus(binary.BigEndian.Uint32(payloadBytes))
+					hc.SetStatus(CSOType(binary.BigEndian.Uint32(payloadBytes)))
 				} else {
 					log.Println("[truncated payload, cannot determine CSOExitStatus]")
 					hc.SetStatus(CSETruncCSO)

@@ -191,7 +191,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 
 			// If local side status was OK, use remote side's status
 			if exitStatus == 0 {
-				exitStatus = conn.GetStatus()
+				exitStatus = uint32(conn.GetStatus())
 				log.Println("Received remote exitStatus:", exitStatus)
 			}
 			log.Printf("*** client->server cp finished , status %d ***\n", conn.GetStatus())

@@ -327,7 +327,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Co
 					log.Printf("Exit Status: %d", exitStatus)
 				}
 			}
-			conn.SetStatus(exitStatus)
+			conn.SetStatus(hkexnet.CSOType(exitStatus))
 		}
 		wg.Wait() // Wait on pty->stdout completion to client
 	}
@@ -522,7 +522,7 @@ func main() {
 						log.Printf("[Error generating autologin token for %s@%s]\n", rec.Who(), hname)
 					} else {
 						log.Printf("[Autologin token generation completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
-						hc.SetStatus(cmdStatus)
+						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 'c' {
 					// Non-interactive command
@@ -539,7 +539,7 @@ func main() {
 						log.Printf("[Error spawning cmd for %s@%s]\n", rec.Who(), hname)
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
-						hc.SetStatus(cmdStatus)
+						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 's' {
 					// Interactive session
@@ -559,7 +559,7 @@ func main() {
 						log.Printf("[Error spawning shell for %s@%s]\n", rec.Who(), hname)
 					} else {
 						log.Printf("[Shell completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
-						hc.SetStatus(cmdStatus)
+						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 'D' {
 					// File copy (destination) operation - client copy to server
@@ -576,7 +576,7 @@ func main() {
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
-					hc.SetStatus(cmdStatus)
+					hc.SetStatus(hkexnet.CSOType(cmdStatus))
 
 					// Send CSOExitStatus *before* client closes channel
 					s := make([]byte, 4)
@@ -598,7 +598,7 @@ func main() {
 					} else {
 						log.Printf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 					}
-					hc.SetStatus(cmdStatus)
+					hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					//fmt.Println("Waiting for EOF from other end.")
 					//_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
