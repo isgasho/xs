@@ -346,7 +346,7 @@ func rejectUserMsg() string {
 // connection (app-specific, passed through to the server to use or
 // ignore at its discretion).
 func main() {
-	version := "0.2pre (NO WARRANTY)"
+	version := hkexsh.Version
 	var vopt bool
 	var gopt bool //login via password, asking server to generate authToken
 	var dbg bool
