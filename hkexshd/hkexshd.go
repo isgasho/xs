@@ -34,7 +34,7 @@ import (
 
 /* -------------------------------------------------------------- */
 // Perform a client->server copy
-func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus uint32) {
+func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus uint32) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -134,7 +134,7 @@ func runClientToServerCopyAs(who, ttype string, conn hkexnet.Conn, fpath string,
 }
 
 // Perform a server->client copy
-func runServerToClientCopyAs(who, ttype string, conn hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus uint32) {
+func runServerToClientCopyAs(who, ttype string, conn *hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus uint32) {
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
 	fmt.Sscanf(u.Uid, "%d", &uid)
@@ -220,7 +220,7 @@ func runServerToClientCopyAs(who, ttype string, conn hkexnet.Conn, srcPath strin
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who, ttype string, cmd string, interactive bool, conn hkexnet.Conn, chaffing bool) (err error, exitStatus uint32) {
+func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.Conn, chaffing bool) (err error, exitStatus uint32) {
 	var wg sync.WaitGroup
 	u, _ := user.Lookup(who)
 	var uid, gid uint32
@@ -416,7 +416,7 @@ func main() {
 			// Handle the connection in a new goroutine.
 			// The loop then returns to accepting, so that
 			// multiple connections may be served concurrently.
-			go func(hc hkexnet.Conn) (e error) {
+			go func(hc *hkexnet.Conn) (e error) {
 				defer hc.Close()
 
 				//We use io.ReadFull() here to guarantee we consume

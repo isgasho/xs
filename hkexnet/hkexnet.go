@@ -80,9 +80,11 @@ type (
 		Rows       uint16
 		Cols       uint16
 
-		chaff ChaffConfig
+		chaff      ChaffConfig
+		totBytes   *uint64 // total bytes xmitted so far
+		totPackets *uint64 // total packets xmitted so far
 
-		closeStat *CSOType       // close status (CSOExitStatus)
+		closeStat *CSOType      // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
 		rm        hash.Hash
 		w         cipher.Stream //write cipherStream
@@ -259,7 +261,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	// NOTE: kex default of KEX_HERRADURA may be overridden by
 	// future extension args to applyConnExtensions(), which is
 	// called prior to Dial()
-	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
+	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
 	hc.applyConnExtensions(extensions...)
 
 	// TODO: Factor out ALL params following this to helpers for
@@ -387,18 +389,18 @@ func (hl HKExListener) Addr() net.Addr {
 // Accept a client connection, conforming to net.Listener.Accept()
 //
 // See go doc net.Listener.Accept
-func (hl *HKExListener) Accept() (hc Conn, err error) {
+func (hl *HKExListener) Accept() (hc *Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
-			r: nil, w: nil}
+		hc := &Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
+			r: nil, w: nil, totBytes: new(uint64), totPackets: new(uint64)}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
-	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
-		dBuf: new(bytes.Buffer)}
+	hc = &Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
+		dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
 
 	// TODO: Factor out ALL params following this to helpers for
 	// specific KEx algs
@@ -413,7 +415,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	switch kexAlg {
 	case KEX_HERRADURA:
 		log.Printf("[KEx alg %d accepted]\n", kexAlg)
-		if HKExAcceptSetup(c, &hc) != nil {
+		if HKExAcceptSetup(c, hc) != nil {
 			return hc, nil
 		}
 	default:
@@ -607,6 +609,18 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 			err = binary.Write(hc.c, binary.BigEndian, payloadLen)
 			if err == nil {
 				n, err = hc.c.Write(wb.Bytes())
+
+				// If regular traffic, update running avg stats
+				if op != CSOChaff {
+					if *hc.totBytes+uint64(n) > *hc.totBytes {
+						*hc.totBytes = *hc.totBytes + uint64(n)
+						*hc.totPackets = *hc.totPackets + 1
+						log.Printf("totPackets:%d totBytes:%d\n",
+							*hc.totPackets, *hc.totBytes)
+					} else {
+						//overflow, don't add to totBytes
+					}
+				}
 			} else {
 				//fmt.Println("[c]WriteError!")
 			}
@@ -653,7 +667,21 @@ func (hc *Conn) chaffHelper() {
 		for {
 			var nextDuration int
 			if hc.chaff.enabled {
-				bufTmp := make([]byte, rand.Intn(int(hc.chaff.szMax)))
+				var bufTmp []byte
+				if false {
+					bufTmp = make([]byte, rand.Intn(int(hc.chaff.szMax)))
+				} else {
+					// size chaff with running avg of actual traffic
+					denom := *hc.totPackets
+					numer := *hc.totBytes
+					if numer == 0 {
+						numer = uint64(rand.Intn(63) + 1)
+					}
+					if denom == 0 {
+						denom = 1
+					}
+					bufTmp = make([]byte, (numer / denom))
+				}
 				min := int(hc.chaff.msecsMin)
 				nextDuration = rand.Intn(int(hc.chaff.msecsMax)-min) + min
 				_, _ = rand.Read(bufTmp)
