@@ -251,17 +251,17 @@ func HKExAcceptSetup(c net.Conn, hc *Conn) (err error) {
 //   "C_AES_256" | "C_TWOFISH_128"
 //
 //   "H_SHA256"
-func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err error) {
+func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := net.Dial(protocol, ipport)
 	if err != nil {
-		return nil, err
+		return hc, err
 	}
 	// Init hkexnet.Conn hc over net.Conn c
 	// NOTE: kex default of KEX_HERRADURA may be overridden by
 	// future extension args to applyConnExtensions(), which is
 	// called prior to Dial()
-	hc = &Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
+	hc = Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
 	hc.applyConnExtensions(extensions...)
 
 	// TODO: Factor out ALL params following this to helpers for
@@ -274,19 +274,19 @@ func Dial(protocol string, ipport string, extensions ...string) (hc *Conn, err e
 	// Perform Key Exchange according to client-request algorithm
 	switch hc.kex {
 	case KEX_HERRADURA:
-		if HKExDialSetup(c, hc) != nil {
+		if HKExDialSetup(c, &hc) != nil {
 			return hc, nil
 		}
 	case KEX_FOO:
 		// For testing: set up as HKEx anyway, but server via Accept() should
 		// reject as invalid.
 		//if FooKExDialSetup(c, hc) != nil {
-		if HKExDialSetup(c, hc) != nil {
+		if HKExDialSetup(c, &hc) != nil {
 			return hc, nil
 		}
 	default:
 		log.Printf("Invalid kex alg (%d), rejecting\n", hc.kex)
-		return nil, errors.New("Invalid kex alg")
+		return hc, errors.New("Invalid kex alg")
 	}
 	return
 }
@@ -389,17 +389,17 @@ func (hl HKExListener) Addr() net.Addr {
 // Accept a client connection, conforming to net.Listener.Accept()
 //
 // See go doc net.Listener.Accept
-func (hl *HKExListener) Accept() (hc *Conn, err error) {
+func (hl *HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := &Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
+		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
 			r: nil, w: nil, totBytes: new(uint64), totPackets: new(uint64)}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
-	hc = &Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
+	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
 		dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
 
 	// TODO: Factor out ALL params following this to helpers for
@@ -415,7 +415,7 @@ func (hl *HKExListener) Accept() (hc *Conn, err error) {
 	switch kexAlg {
 	case KEX_HERRADURA:
 		log.Printf("[KEx alg %d accepted]\n", kexAlg)
-		if HKExAcceptSetup(c, hc) != nil {
+		if HKExAcceptSetup(c, &hc) != nil {
 			return hc, nil
 		}
 	default:

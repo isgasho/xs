@@ -613,9 +613,9 @@ func main() {
 		}
 
 		if shellMode {
-			doShellMode(isInteractive, conn, oldState, rec)
+			doShellMode(isInteractive, &conn, oldState, rec)
 		} else { // copyMode
-			_, s := doCopyMode(conn, pathIsDest, fileArgs, rec)
+			_, s := doCopyMode(&conn, pathIsDest, fileArgs, rec)
 			rec.SetStatus(s)
 		}
 

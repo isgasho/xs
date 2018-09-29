@@ -606,7 +606,7 @@ func main() {
 					log.Println("[Bad hkexsh.Session]")
 				}
 				return
-			}(conn)
+			}(&conn)
 		} // Accept() success
 	} //endfor
 	log.Println("[Exiting]")
