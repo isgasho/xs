@@ -27,6 +27,7 @@ import (
 	// (Would be nice if the golang pkg docs were more clear
 	// on this...)
 	_ "crypto/sha256"
+	_ "crypto/sha512"
 )
 
 /* Support functionality to set up encryption after a channel has
@@ -87,6 +88,14 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash, err e
 	case HmacSHA256:
 		log.Printf("[hash HmacSHA256 (%d)]\n", hopts)
 		halg := crypto.SHA256
+		mc = halg.New()
+		if !halg.Available() {
+			log.Fatal("hash not available!")
+		}
+		break
+	case HmacSHA512:
+		log.Printf("[hash HmacSHA512 (%d)]\n", hopts)
+		halg := crypto.SHA512
 		mc = halg.New()
 		if !halg.Available() {
 			log.Fatal("hash not available!")

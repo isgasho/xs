@@ -176,6 +176,11 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 			hc.cipheropts &= (0xFFFF00FF)
 			hc.cipheropts |= (HmacSHA256 << 8)
 			break
+		case "H_SHA512":
+			log.Println("[extension arg = H_SHA512]")
+			hc.cipheropts &= (0xFFFF00FF)
+			hc.cipheropts |= (HmacSHA512 << 8)
+			break
 		default:
 			log.Printf("[Dial ext \"%s\" ignored]\n", s)
 			break

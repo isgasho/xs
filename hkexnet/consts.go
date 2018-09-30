@@ -52,6 +52,7 @@ type CSCipherAlg uint32
 
 const (
 	HmacSHA256 = iota
+	HmacSHA512
 	HmacNoneDisallowed
 )
 // Available HMACs for hkex.Conn (TODO: not currently used)
