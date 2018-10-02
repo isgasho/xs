@@ -49,6 +49,7 @@ import (
 )
 
 /*---------------------------------------------------------------------*/
+const PAD_SZ = 32
 
 type (
 	WinSize struct {
@@ -80,9 +81,7 @@ type (
 		Rows       uint16
 		Cols       uint16
 
-		chaff      ChaffConfig
-		totBytes   *uint64 // total bytes xmitted so far
-		totPackets *uint64 // total packets xmitted so far
+		chaff ChaffConfig
 
 		closeStat *CSOType      // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
@@ -266,7 +265,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err er
 	// NOTE: kex default of KEX_HERRADURA may be overridden by
 	// future extension args to applyConnExtensions(), which is
 	// called prior to Dial()
-	hc = Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
+	hc = Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
 	hc.applyConnExtensions(extensions...)
 
 	// TODO: Factor out ALL params following this to helpers for
@@ -399,13 +398,13 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	c, err := hl.l.Accept()
 	if err != nil {
 		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
-			r: nil, w: nil, totBytes: new(uint64), totPackets: new(uint64)}
+			r: nil, w: nil}
 		return hc, err
 	}
 	log.Println("[Accepted]")
 
 	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
-		dBuf: new(bytes.Buffer), totBytes: new(uint64), totPackets: new(uint64)}
+		dBuf: new(bytes.Buffer)}
 
 	// TODO: Factor out ALL params following this to helpers for
 	// specific KEx algs
@@ -503,13 +502,27 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// to the parameter of Read() as a normal io.Reader
 		rs := &cipher.StreamReader{S: hc.r, R: db}
 		// The caller isn't necessarily reading the full payload so we need
-		// to decrypt ot an intermediate buffer, draining it on demand of caller
+		// to decrypt to an intermediate buffer, draining it on demand of caller
 		decryptN, err := rs.Read(payloadBytes)
 		log.Printf("  <-ptext:\r\n%s\r\n", hex.Dump(payloadBytes[:n]))
 		if err != nil {
 			log.Println("hkexnet.Read():", err)
 			//panic(err)
 		} else {
+			hc.rm.Write(payloadBytes) // Calc hmac on received data
+			// Padding: Read padSide, padLen, (padding | d) or (d | padding)
+			padSide := payloadBytes[0]
+			padLen := payloadBytes[1]
+
+			payloadBytes = payloadBytes[2:]
+			if padSide == 0 {
+				payloadBytes = payloadBytes[padLen:]
+			} else {
+				payloadBytes = payloadBytes[0 : len(payloadBytes)-int(padLen)]
+			}
+
+			//fmt.Printf("padSide:%d padLen:%d payloadBytes:%s\n",
+			//	padSide, padLen, hex.Dump(payloadBytes))
 
 			// Throw away pkt if it's chaff (ie., caller to Read() won't see this data)
 			if ctrlStatOp == CSOChaff {
@@ -531,8 +544,6 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
 			}
 
-			// Re-calculate hmac, compare with received value
-			hc.rm.Write(payloadBytes)
 			hTmp := hc.rm.Sum(nil)[0:4]
 			log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
@@ -562,7 +573,9 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 //
 // See go doc io.Writer
 func (hc Conn) Write(b []byte) (n int, err error) {
+	//fmt.Printf("WRITE(%d)\n", len(b))
 	n, err = hc.WritePacket(b, CSONone)
+	//fmt.Printf("WROTE(%d)\n", n)
 	return n, err
 }
 
@@ -575,6 +588,28 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	if hc.m == nil || hc.wm == nil {
 		return 0, errors.New("Secure chan not ready for writing")
 	}
+
+	//Padding
+	padLen := PAD_SZ - ((uint32(len(b)) + PAD_SZ) % PAD_SZ)
+	if padLen == PAD_SZ {
+		// No padding required
+		padLen = 0
+	}
+	padBytes := make([]byte, padLen)
+	rand.Read(padBytes)
+	// For a little more confusion let's support padding either before
+	// or after the payload.
+	padSide := rand.Intn(2)
+	//fmt.Printf("--\n")
+	//fmt.Printf("PRE_PADDING:%s\r\n", hex.Dump(b))
+	//fmt.Printf("padSide:%d padLen:%d\r\n", padSide, padLen)
+	if padSide == 0 {
+		b = append([]byte{byte(padSide)}, append([]byte{byte(padLen)}, append(padBytes, b...)...)...)
+	} else {
+		b = append([]byte{byte(padSide)}, append([]byte{byte(padLen)}, append(b, padBytes...)...)...)
+	}
+	//fmt.Printf("POST_PADDING:%s\r\n", hex.Dump(b))
+	//fmt.Printf("--\r\n")
 
 	// N.B. Originally this Lock() surrounded only the
 	// calls to binary.Write(hc.c ..) however there appears
@@ -614,18 +649,6 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 			err = binary.Write(hc.c, binary.BigEndian, payloadLen)
 			if err == nil {
 				n, err = hc.c.Write(wb.Bytes())
-
-				// If regular traffic, update running avg stats
-				if op != CSOChaff {
-					if *hc.totBytes+uint64(n) > *hc.totBytes {
-						*hc.totBytes = *hc.totBytes + uint64(n)
-						*hc.totPackets = *hc.totPackets + 1
-						log.Printf("totPackets:%d totBytes:%d\n",
-							*hc.totPackets, *hc.totBytes)
-					} else {
-						//overflow, don't add to totBytes
-					}
-				}
 			} else {
 				//fmt.Println("[c]WriteError!")
 			}
@@ -640,7 +663,10 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	if err != nil {
 		log.Println(err)
 	}
-	return
+
+	// We must 'lie' to caller indicating the length of THEIR
+	// data written (ie., not including the padding and padding headers)
+	return n - 2 - int(padLen), err
 }
 
 func (hc *Conn) EnableChaff() {
@@ -673,20 +699,7 @@ func (hc *Conn) chaffHelper() {
 			var nextDuration int
 			if hc.chaff.enabled {
 				var bufTmp []byte
-				if false {
-					bufTmp = make([]byte, rand.Intn(int(hc.chaff.szMax)))
-				} else {
-					// size chaff with running avg of actual traffic
-					denom := *hc.totPackets
-					numer := *hc.totBytes
-					if numer == 0 {
-						numer = uint64(rand.Intn(63) + 1)
-					}
-					if denom == 0 {
-						denom = 1
-					}
-					bufTmp = make([]byte, (numer / denom))
-				}
+				bufTmp = make([]byte, rand.Intn(int(hc.chaff.szMax)))
 				min := int(hc.chaff.msecsMin)
 				nextDuration = rand.Intn(int(hc.chaff.msecsMax)-min) + min
 				_, _ = rand.Read(bufTmp)
