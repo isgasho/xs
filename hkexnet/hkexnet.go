@@ -590,8 +590,9 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	}
 
 	//Padding
-	padLen := PAD_SZ - ((uint32(len(b)) + PAD_SZ) % PAD_SZ)
-	if padLen == PAD_SZ {
+	padSz := (rand.Intn(PAD_SZ) / 2) + (PAD_SZ / 2)
+	padLen := padSz - ((len(b) + padSz) % padSz)
+	if padLen == padSz {
 		// No padding required
 		padLen = 0
 	}

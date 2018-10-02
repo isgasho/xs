@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -353,7 +352,7 @@ func GenAuthToken(who string, connhost string) string {
 // Compare to 'serverp.go' in this directory to see the equivalence.
 func main() {
 	version := hkexsh.Version
-	
+
 	var vopt bool
 	var chaffEnabled bool
 	var chaffFreqMin uint
@@ -510,7 +509,7 @@ func main() {
 				if rec.Op()[0] == 'A' {
 					// Generate automated login token
 					addr := hc.RemoteAddr()
-					hname := strings.Split(addr.String(), ":")[0]
+					hname := goutmp.GetHost(addr.String())
 					log.Printf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname)
 					token := GenAuthToken(string(rec.Who()), string(rec.ConnHost()))
 					tokenCmd := fmt.Sprintf("echo \"%s\" | tee -a ~/.hkexsh_id", token)
@@ -527,9 +526,7 @@ func main() {
 				} else if rec.Op()[0] == 'c' {
 					// Non-interactive command
 					addr := hc.RemoteAddr()
-					//hname := goutmp.GetHost(addr.String())
-					hname := strings.Split(addr.String(), ":")[0]
-
+					hname := goutmp.GetHost(addr.String())
 					log.Printf("[Running command for [%s@%s]]\n", rec.Who(), hname)
 					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
@@ -544,8 +541,7 @@ func main() {
 				} else if rec.Op()[0] == 's' {
 					// Interactive session
 					addr := hc.RemoteAddr()
-					//hname := goutmp.GetHost(addr.String())
-					hname := strings.Split(addr.String(), ":")[0]
+					hname := goutmp.GetHost(addr.String())
 					log.Printf("[Running shell for [%s@%s]]\n", rec.Who(), hname)
 
 					utmpx := goutmp.Put_utmp(string(rec.Who()), hname)
@@ -565,7 +561,7 @@ func main() {
 					// File copy (destination) operation - client copy to server
 					log.Printf("[Client->Server copy]\n")
 					addr := hc.RemoteAddr()
-					hname := strings.Split(addr.String(), ":")[0]
+					hname := goutmp.GetHost(addr.String())
 					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
 					runErr, cmdStatus := runClientToServerCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
@@ -587,7 +583,7 @@ func main() {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
 					addr := hc.RemoteAddr()
-					hname := strings.Split(addr.String(), ":")[0]
+					hname := goutmp.GetHost(addr.String())
 					log.Printf("[Running copy for [%s@%s]]\n", rec.Who(), hname)
 					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
