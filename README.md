@@ -65,12 +65,9 @@ To build
 
 To set accounts & passwords:
 --
-* $ echo "joebloggs:*:*:*" >hkexsh.passwd
-* $ sudo mv hkexsh.passwd /etc
+* $ sudo touch /etc/hkexsh.passwd
 * $ sudo hkexpasswd/hkexpasswd -u joebloggs
 * $ &lt;enter a password, enter again to confirm&gt;
-
-WARNING WARNING WARNING: the -d debug flag will echo passwords to the log/console!
 
 Running Clent and Server
 --
@@ -83,25 +80,39 @@ Interactive shell
 One-shot command
 * [B]$ cd hkexsh && ./hkexsh -x "ls /tmp" joebloggs@host-or-ip
 
+WARNING WARNING WARNING: the -d debug flag will echo passwords to the log/console!
+
 NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' afterwards
-to fix up the shell tty afterwards as stty echo may not be restored if client crashes
+to fix up the shell tty afterwards, as stty echo may not be restored if client crashes
 or is interrupted.
 
-File Copying using hkexcp (**EXPERIMENTAL** - See issue tracker)
+Setting up an 'authtoken' for scripted (password-free) logins
 --
-hkexcp is a symlink to hkexsh, and the binary checks its own filename to determine whether it is being invoked in 'shell' or 'copy' mode. Refer to the '-h' output for differences in accepted options.
+Use the -g option of hkexsh to request a token from the remote server, which will return a
+hostname:token string. Place this string into $HOME/.hkexsh_id to allow logins without
+entering a password (obviously, $HOME/.hkexsh_id on both server and client $HOME for the user
+should *not* be world-readable.)
+
+File Copying using hkexcp
+--
+hkexcp is a symlink to hkexsh, and the binary checks its own filename to determine whether
+it is being invoked in 'shell' or 'copy' mode. Refer to the '-h' output for differences in
+accepted options.
 
 General remote syntax is: user@server:[/]src-or-dest-path
-If no leading / is specified in src-or-dest-path, it is assumed to be relative to $HOME of the remote user.
-File operations are all performed as the remote user, so account permissions apply as expected.
+If no leading / is specified in src-or-dest-path, it is assumed to be relative to $HOME of the
+remote user. File operations are all performed as the remote user, so account permissions apply
+as expected.
 
 Local (client) to remote (server) copy:
-* cd hkexsh && ./hkexcp fileA /some/where/fileB /some/where/else/dirC joebloggs@host-or-ip:/remoteDir
+* cd hkexsh && ./hkexcp fileA /some/where/fileB /some/where/else/dirC joebloggs@host-or-ip:remoteDir
 
 Remote (server) to local (client) copy:
 * cd hekxsh && ./hkexcp joebloggs@host-or-ip:/remoteDirOrFile /some/where/local/Dir
 
+NOTE: Renaming while copying is NOT supported (ie., like cp's 'cp /foo/bar/fileA ./fileB).
+Put another way, the destination (whether local or remote) is ALWAYS a dir.
 
-NOTE: Renaming while copying is NOT supported (ie., like cp's 'cp /foo/bar/fileA ./fileB). Put another way, the destination (whether local or remote) is ALWAYS a dir.
-
-hkexcp uses tar with gzip compression (ala a 'tarpipe') under the hood, sending tar data over the hkex encrypted channel. Use the -d flag on client or server to see the generated tar commandlines if you're curious.
+hkexcp uses tar with gzip compression (ala a 'tarpipe') under the hood, sending tar data over
+the hkex encrypted channel. Use the -d flag on client or server to see the generated tar
+commandlines if you're curious.
