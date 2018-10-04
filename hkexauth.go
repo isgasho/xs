@@ -22,6 +22,15 @@ import (
 	"github.com/jameskeane/bcrypt"
 )
 
+func userExistsOnSystem(who string) bool {
+	_, userErr := user.Lookup(who)
+	if userErr != nil {
+		return false
+	} else {
+		return true
+	}
+}
+
 func AuthUserByPasswd(username string, auth string, fname string) (valid bool, allowedCmds string) {
 	b, e := ioutil.ReadFile(fname)
 	if e != nil {
@@ -66,6 +75,9 @@ func AuthUserByPasswd(username string, auth string, fname string) (valid bool, a
 	r = nil
 	runtime.GC()
 
+	if !userExistsOnSystem(username) {
+		valid = false
+	}
 	return
 }
 
@@ -101,6 +113,9 @@ func AuthUserByToken(username string, connhostname string, auth string) (valid b
 			(auth == strings.Join([]string{record[0], record[1]}, ":")) {
 			return true
 		}
+	}
+	if !userExistsOnSystem(username) {
+		valid = false
 	}
 	return
 }
