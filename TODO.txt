@@ -17,13 +17,7 @@ Architecture
 
 Features
 (DONE) - Support for hkcp (hkex-cp) - secure file copy protocol
-- (IN PROGRESS) auth tokens to allow scripted hkexsh/hkexcp use
-  * ~/.hkexsh_id file with multiple (host:token) entries
-    (Currently only one supported - need to support multiple lines for
-     multiple dest servers; client sends host/ip used to connect to server,
-     so multihomed servers can still be specified, with separate entries
-     stored in both server/client ~/.hkexsh_id files. Use connhost here to
-     match against proper entry.)
+(DONE) auth tokens to allow scripted hkexsh/hkexcp use
 - hktun - tunnelling - multiple tunnel sessions co-existing w/shell sessions
 
 Alternate transports for hkexsh.Conn - HTTP-mimicking traffic, ICMP, ... ?
