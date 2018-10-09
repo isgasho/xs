@@ -9,10 +9,11 @@ package hkexnet
 
 const (
 	KEX_HERRADURA = iota // this MUST be first for default if omitted in ctor
-	KEX_FOO
+	KEX_KYBER768
 	//KEX_DH
 	//KEX_ETC
 )
+
 // Sent from client to server in order to specify which
 // algo shall be used (eg., HerraduraKEx, [TODO: others...])
 type KEXAlg uint8
@@ -39,6 +40,7 @@ const (
 // Channel status type
 type CSOType uint32
 
+//TODO: this should be small (max unfragmented packet size?)
 const MAX_PAYLOAD_LEN = 4*1024*1024*1024 - 1
 
 const (

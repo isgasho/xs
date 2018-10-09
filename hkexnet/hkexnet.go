@@ -69,14 +69,15 @@ type (
 		szMax    uint // max size in bytes
 	}
 
-	// Conn is a HKex connection - a superset of net.Conn
+	//h          *hkex.HerraduraKEx // TODO: make an interface?
+
+	// Conn is a connection wrapping net.Conn with KEX & session state
 	Conn struct {
-		kex        KEXAlg
-		m          *sync.Mutex
-		c          net.Conn           // which also implements io.Reader, io.Writer, ...
-		h          *hkex.HerraduraKEx // TODO: make an interface?
-		cipheropts uint32             // post-KEx cipher/hmac options
-		opts       uint32             // post-KEx protocol options (caller-defined)
+		kex        KEXAlg      // KEX/KEM propsal (client -> server)
+		m          *sync.Mutex // (internal)
+		c          *net.Conn   // which also implements io.Reader, io.Writer, ...
+		cipheropts uint32      // post-KEx cipher/hmac options
+		opts       uint32      // post-KEx protocol options (caller-defined)
 		WinCh      chan WinSize
 		Rows       uint16
 		Cols       uint16
@@ -138,6 +139,48 @@ func (hc *Conn) SetOpts(opts uint32) {
 	hc.opts = opts
 }
 
+func getkexalgnum(extensions ...string) (k KEXAlg) {
+	for _, s := range extensions {
+		switch s {
+		case "KEX_HERRADURA":
+		default:
+			log.Println("[extension arg = KEX_HERRADURA]")
+			k = KEX_HERRADURA
+		case "KEX_KYBER768":
+			log.Println("[extension arg = KEX_KYBER768]")
+			k = KEX_KYBER768
+		}
+	}
+	return
+}
+
+// Return a new hkexnet.Conn
+//
+// Note this is internal: use Dial() or Accept()
+func _new(kexAlg KEXAlg, conn *net.Conn) (hc *Conn, e error) {
+	// Set up stuff common to all KEx/KEM types
+	hc = &Conn{kex: kexAlg,
+		m:         &sync.Mutex{},
+		c:         conn,
+		closeStat: new(CSOType),
+		WinCh:     make(chan WinSize, 1),
+		dBuf:      new(bytes.Buffer)}
+
+	*hc.closeStat = CSEStillOpen // open or prematurely-closed status
+
+	// Set up KEx/KEM-specifics
+	switch hc.kex {
+	case KEX_HERRADURA:
+	default:
+		return hc, HKExAcceptSetup(hc.c, hc)
+		log.Printf("[KEx alg %d accepted]\n", kexAlg)
+	case KEX_KYBER768:
+		fmt.Println("KYBER768: TODO")
+		return nil, errors.New("KEx Setup failed")
+	}
+	return
+}
+
 func (hc *Conn) applyConnExtensions(extensions ...string) {
 	//fmt.Printf("CSENone:%d CSEBadAuth:%d CSETruncCSO:%d CSEStillOpen:%d CSEExecFail:%d CSEPtyExecFail:%d\n",
 	//	CSENone, CSEBadAuth, CSETruncCSO, CSEStillOpen, CSEExecFail, CSEPtyExecFail)
@@ -147,14 +190,6 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 
 	for _, s := range extensions {
 		switch s {
-		case "KEX_HERRADURA":
-			log.Println("[extension arg = KEX_HERRADURA]")
-			hc.kex = KEX_HERRADURA
-			break
-		case "KEX_FOO":
-			log.Println("[extension arg = KEX_FOO]")
-			hc.kex = KEX_FOO
-			break
 		case "C_AES_256":
 			log.Println("[extension arg = C_AES_256]")
 			hc.cipheropts &= (0xFFFFFF00)
@@ -187,10 +222,15 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 	}
 }
 
+func Kyber768DialSetup(c net.Conn, hc *Conn) (err error) {
+	return errors.New("NOT IMPLEMENTED")
+}
+
 func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
+	h := hkex.New(0, 0)
 	// Send hkexnet.Conn parameters to remote side
 	// d is value for Herradura key exchange
-	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.D().Text(16),
+	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
 	d := big.NewInt(0)
@@ -205,44 +245,49 @@ func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
 		return err
 	}
 
-	hc.h.SetPeerD(d)
-	log.Printf("** local D:%s\n", hc.h.D().Text(16))
-	log.Printf("**(c)** peer D:%s\n", hc.h.PeerD().Text(16))
-	hc.h.ComputeFA()
-	log.Printf("**(c)** FA:%s\n", hc.h.FA())
+	h.SetPeerD(d)
+	log.Printf("** local D:%s\n", h.D().Text(16))
+	log.Printf("**(c)** peer D:%s\n", h.PeerD().Text(16))
+	h.ComputeFA()
+	log.Printf("**(c)** FA:%s\n", h.FA())
 
-	hc.r, hc.rm, err = hc.getStream(hc.h.FA())
-	hc.w, hc.wm, err = hc.getStream(hc.h.FA())
+	hc.r, hc.rm, err = hc.getStream(h.FA())
+	hc.w, hc.wm, err = hc.getStream(h.FA())
 	return
 }
 
-func HKExAcceptSetup(c net.Conn, hc *Conn) (err error) {
+func Kyber768AcceptSetup(c *net.Conn, hc *Conn) (err error) {
+	return errors.New("NOT IMPLEMENTED")
+}
+
+func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
+	h := hkex.New(0, 0)
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
 	d := big.NewInt(0)
-	_, err = fmt.Fscanln(c, d)
+	_, err = fmt.Fscanln(*c, d)
 	log.Printf("[Got d:%v]", d)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+	_, err = fmt.Fscanf(*c, "%08x:%08x\n",
 		&hc.cipheropts, &hc.opts)
 	log.Printf("[Got cipheropts, opts:%v, %v]", hc.cipheropts, hc.opts)
 	if err != nil {
 		return err
 	}
-	hc.h.SetPeerD(d)
-	log.Printf("** D:%s\n", hc.h.D().Text(16))
-	log.Printf("**(s)** peerD:%s\n", hc.h.PeerD().Text(16))
-	hc.h.ComputeFA()
-	log.Printf("**(s)** FA:%s\n", hc.h.FA())
+	h.SetPeerD(d)
+	log.Printf("** D:%s\n", h.D().Text(16))
+	log.Printf("**(s)** peerD:%s\n", h.PeerD().Text(16))
+	h.ComputeFA()
+	log.Printf("**(s)** FA:%s\n", h.FA())
 
 	// Send D and cipheropts/conn_opts to peer
-	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", hc.h.D().Text(16),
+	fmt.Fprintf(*c, "0x%s\n%08x:%08x\n", h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
-	hc.r, hc.rm, err = hc.getStream(hc.h.FA())
-	hc.w, hc.wm, err = hc.getStream(hc.h.FA())
+	hc.r, hc.rm, err = hc.getStream(h.FA())
+	hc.w, hc.wm, err = hc.getStream(h.FA())
 	return
 }
 
@@ -259,38 +304,38 @@ func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err er
 	// Open raw Conn c
 	c, err := net.Dial(protocol, ipport)
 	if err != nil {
-		return hc, err
+		return Conn{}, err
 	}
+	
 	// Init hkexnet.Conn hc over net.Conn c
-	// NOTE: kex default of KEX_HERRADURA may be overridden by
-	// future extension args to applyConnExtensions(), which is
-	// called prior to Dial()
-	hc = Conn{m: &sync.Mutex{}, c: c, closeStat: new(CSOType), h: hkex.New(0, 0), dBuf: new(bytes.Buffer)}
+	ret, err := _new(getkexalgnum(extensions...), &c)
+	if err != nil {
+		return Conn{}, err
+	}
+	hc = *ret
+
+	// Client has full control over Conn extensions. It's the server's
+	// responsibility to accept or reject the proposed parameters.
 	hc.applyConnExtensions(extensions...)
 
-	// TODO: Factor out ALL params following this to helpers for
-	// specific KEx algs
-	fmt.Fprintf(c, "%02x\n", hc.kex)
-	// --
-
-	*hc.closeStat = CSEStillOpen // open or prematurely-closed status
-
 	// Perform Key Exchange according to client-request algorithm
+	fmt.Fprintf(c, "%02x\n", hc.kex)
 	switch hc.kex {
 	case KEX_HERRADURA:
+		fmt.Println("[HKExDialSetup()]")
 		if HKExDialSetup(c, &hc) != nil {
-			return hc, nil
+			return Conn{}, nil
 		}
-	case KEX_FOO:
-		// For testing: set up as HKEx anyway, but server via Accept() should
-		// reject as invalid.
-		//if FooKExDialSetup(c, hc) != nil {
-		if HKExDialSetup(c, &hc) != nil {
-			return hc, nil
+	case KEX_KYBER768:
+		fmt.Println("[Kyber768DialSetup()]")
+		if Kyber768DialSetup(c, &hc) != nil {
+			return Conn{}, nil
 		}
 	default:
-		log.Printf("Invalid kex alg (%d), rejecting\n", hc.kex)
-		return hc, errors.New("Invalid kex alg")
+		fmt.Println("[Default HKExDialSetup()]")
+		if HKExDialSetup(c, &hc) != nil {
+			return Conn{}, nil
+		}
 	}
 	return
 }
@@ -302,19 +347,19 @@ func (hc *Conn) Close() (err error) {
 	binary.BigEndian.PutUint32(s, uint32(*hc.closeStat))
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
 	hc.WritePacket(s, CSOExitStatus)
-	err = hc.c.Close()
+	err = (*hc.c).Close()
 	log.Println("[Conn Closing]")
 	return
 }
 
 // LocalAddr returns the local network address.
 func (hc *Conn) LocalAddr() net.Addr {
-	return hc.c.LocalAddr()
+	return (*hc.c).LocalAddr()
 }
 
 // RemoteAddr returns the remote network address.
 func (hc *Conn) RemoteAddr() net.Addr {
-	return hc.c.RemoteAddr()
+	return (*hc.c).RemoteAddr()
 }
 
 // SetDeadline sets the read and write deadlines associated
@@ -333,7 +378,7 @@ func (hc *Conn) RemoteAddr() net.Addr {
 //
 // A zero value for t means I/O operations will not time out.
 func (hc *Conn) SetDeadline(t time.Time) error {
-	return hc.c.SetDeadline(t)
+	return (*hc.c).SetDeadline(t)
 }
 
 // SetWriteDeadline sets the deadline for future Write calls
@@ -342,14 +387,14 @@ func (hc *Conn) SetDeadline(t time.Time) error {
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
 func (hc *Conn) SetWriteDeadline(t time.Time) error {
-	return hc.c.SetWriteDeadline(t)
+	return (*hc.c).SetWriteDeadline(t)
 }
 
 // SetReadDeadline sets the deadline for future Read calls
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
 func (hc *Conn) SetReadDeadline(t time.Time) error {
-	return hc.c.SetReadDeadline(t)
+	return (*hc.c).SetReadDeadline(t)
 }
 
 /*---------------------------------------------------------------------*/
@@ -397,35 +442,46 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	// Open raw Conn c
 	c, err := hl.l.Accept()
 	if err != nil {
-		hc := Conn{m: &sync.Mutex{}, c: nil, h: nil, closeStat: new(CSOType), cipheropts: 0, opts: 0,
-			r: nil, w: nil}
-		return hc, err
+		return Conn{}, err
 	}
-	log.Println("[Accepted]")
+	log.Println("[net.Listener Accepted]")
 
-	hc = Conn{ /*kex: from client,*/ m: &sync.Mutex{}, c: c, h: hkex.New(0, 0), closeStat: new(CSOType), WinCh: make(chan WinSize, 1),
-		dBuf: new(bytes.Buffer)}
-
-	// TODO: Factor out ALL params following this to helpers for
-	// specific KEx algs
-	var kexAlg uint8
+	// Read KEx alg proposed by client
+	var kexAlg KEXAlg
 	_, err = fmt.Fscanln(c, &kexAlg)
 	if err != nil {
-		return hc, err
+		return Conn{}, err
 	}
 	log.Printf("[Client proposed KEx alg: %v]\n", kexAlg)
 	// --
 
-	switch kexAlg {
+	ret, err := _new(kexAlg, &c)
+	if err != nil {
+		return Conn{}, err
+	}
+	hc = *ret
+
+	switch hc.kex {
 	case KEX_HERRADURA:
-		log.Printf("[KEx alg %d accepted]\n", kexAlg)
-		if HKExAcceptSetup(c, &hc) != nil {
-			return hc, nil
+		log.Println("[Setting up for KEX_HERRADURA]")
+		if HKExAcceptSetup(&c, &hc) != nil {
+			log.Println("[ERROR - KEX_HERRADURA]")
+			return Conn{}, nil
+		}
+	case KEX_KYBER768:
+		log.Println("[Setting up for KEX_KYBER768]")
+		if Kyber768AcceptSetup(&c, &hc) != nil {
+			log.Println("[ERROR - KEX_KYBER768]")
+			return Conn{}, nil
 		}
 	default:
-		log.Printf("[KEx alg %d rejected]\n", kexAlg)
-		return hc, errors.New("KEx rejected")
+		log.Println("[unknown alg, Setting up for KEX_HERRADURA]")
+		if HKExAcceptSetup(&c, &hc) != nil {
+			log.Println("[ERROR - default KEX_HERRADURA]")
+			return Conn{}, nil
+		}
 	}
+	log.Println("[hc.Accept successful]")
 	return
 }
 
@@ -447,7 +503,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		var payloadLen uint32
 
 		// Read ctrl/status opcode (CSOHmacInvalid on hmac mismatch)
-		err = binary.Read(hc.c, binary.BigEndian, &ctrlStatOp)
+		err = binary.Read(*hc.c, binary.BigEndian, &ctrlStatOp)
 		log.Printf("[ctrlStatOp: %v]\n", ctrlStatOp)
 		if ctrlStatOp == CSOHmacInvalid {
 			// Other side indicated channel tampering, close channel
@@ -456,7 +512,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		}
 
 		// Read the hmac and payload len first
-		err = binary.Read(hc.c, binary.BigEndian, &hmacIn)
+		err = binary.Read(*hc.c, binary.BigEndian, &hmacIn)
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
@@ -468,7 +524,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			return 0, err
 		}
 
-		err = binary.Read(hc.c, binary.BigEndian, &payloadLen)
+		err = binary.Read(*hc.c, binary.BigEndian, &payloadLen)
 		if err != nil {
 			if err.Error() != "EOF" {
 				log.Println("[2]unexpected Read() err:", err)
@@ -482,7 +538,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		}
 
 		var payloadBytes = make([]byte, payloadLen)
-		n, err = io.ReadFull(hc.c, payloadBytes)
+		n, err = io.ReadFull(*hc.c, payloadBytes)
 
 		// Normal client 'exit' from interactive session will cause
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
@@ -553,7 +609,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				// Log alert if hmac didn't match, corrupted channel
 				if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
 					fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
-					_, _ = hc.c.Write([]byte{CSOHmacInvalid})
+					_, _ = (*hc.c).Write([]byte{CSOHmacInvalid})
 				}
 			}
 		}
@@ -642,14 +698,14 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
 
 	ctrlStatOp := op
-	err = binary.Write(hc.c, binary.BigEndian, &ctrlStatOp)
+	err = binary.Write(*hc.c, binary.BigEndian, &ctrlStatOp)
 	if err == nil {
 		// Write hmac LSB, payloadLen followed by payload
-		err = binary.Write(hc.c, binary.BigEndian, hmacOut)
+		err = binary.Write(*hc.c, binary.BigEndian, hmacOut)
 		if err == nil {
-			err = binary.Write(hc.c, binary.BigEndian, payloadLen)
+			err = binary.Write(*hc.c, binary.BigEndian, payloadLen)
 			if err == nil {
-				n, err = hc.c.Write(wb.Bytes())
+				n, err = (*hc.c).Write(wb.Bytes())
 			} else {
 				//fmt.Println("[c]WriteError!")
 			}

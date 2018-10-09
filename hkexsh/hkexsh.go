@@ -543,7 +543,7 @@ func main() {
 		}
 	}
 
-	conn, err := hkexnet.Dial("tcp", server /*[kexAlg eg. "KEX_HERRADURA"], */, cAlg, hAlg)
+	conn, err := hkexnet.Dial("tcp", server, "KEX_HERRADURA", cAlg, hAlg)
 	if err != nil {
 		fmt.Println(err)
 		panic(err)
