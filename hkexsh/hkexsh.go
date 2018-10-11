@@ -351,8 +351,9 @@ func main() {
 	var gopt bool //login via password, asking server to generate authToken
 	var dbg bool
 	var shellMode bool // if true act as shell, else file copier
-	var cAlg string
-	var hAlg string
+	var cAlg string    //cipher alg
+	var hAlg string    //hmac alg
+	var kAlg string    //KEX/KEM alg
 	var server string
 	var port uint
 	var cmdStr string
@@ -373,6 +374,7 @@ func main() {
 	flag.BoolVar(&dbg, "d", false, "debug logging")
 	flag.StringVar(&cAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
 	flag.StringVar(&hAlg, "m", "H_SHA256", "`hmac` [\"H_SHA256\"]")
+	flag.StringVar(&kAlg, "k", "KEX_HERRADURA", "`kex` [\"KEX_HERRADURA\" | \"KEX_KYBER768\"]")
 	flag.UintVar(&port, "p", 2000, "`port`")
 	//flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
@@ -543,7 +545,7 @@ func main() {
 		}
 	}
 
-	conn, err := hkexnet.Dial("tcp", server, "KEX_HERRADURA", cAlg, hAlg)
+	conn, err := hkexnet.Dial("tcp", server, cAlg, hAlg, kAlg)
 	if err != nil {
 		fmt.Println(err)
 		panic(err)

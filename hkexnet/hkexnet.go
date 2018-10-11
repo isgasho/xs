@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"blitter.com/go/hkexsh/herradurakex"
+	kyber "git.schwanenlied.me/yawning/kyber.git"
 )
 
 /*---------------------------------------------------------------------*/
@@ -171,12 +172,14 @@ func _new(kexAlg KEXAlg, conn *net.Conn) (hc *Conn, e error) {
 	// Set up KEx/KEM-specifics
 	switch hc.kex {
 	case KEX_HERRADURA:
-	default:
-		return hc, HKExAcceptSetup(hc.c, hc)
+		return hc, nil //HKExAcceptSetup(hc.c, hc)
 		log.Printf("[KEx alg %d accepted]\n", kexAlg)
 	case KEX_KYBER768:
-		fmt.Println("KYBER768: TODO")
-		return nil, errors.New("KEx Setup failed")
+		return hc, nil //Kyber768AcceptSetup(hc.c, hc)
+		log.Printf("[KEx alg %d accepted]\n", kexAlg)
+	default:
+		return hc, nil //HKExAcceptSetup(hc.c, hc)
+		log.Printf("[KEx alg %d accepted]\n", kexAlg)
 	}
 	return
 }
@@ -222,8 +225,53 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 	}
 }
 
+// randReader wraps rand.Read() in a struct that implements io.Reader
+// for use by the Kyber KEM methods.
+type randReader struct {
+}
+
+func (r randReader) Read(b []byte) (n int, e error) {
+	n, e = rand.Read(b)
+	return
+}
+
 func Kyber768DialSetup(c net.Conn, hc *Conn) (err error) {
-	return errors.New("NOT IMPLEMENTED")
+	//h := hkex.New(0, 0)
+	// Send hkexnet.Conn parameters to remote side
+
+	// Alice, step 1: Generate a key pair.
+	r := new(randReader)
+	alicePublicKey, alicePrivateKey, err := kyber.Kyber768.GenerateKeyPair(r)
+	if err != nil {
+		panic(err)
+	}
+
+	// Alice, step 2: Send the public key to Bob
+	fmt.Fprintf(c, "0x%x\n%08x:%08x\n", alicePublicKey.Bytes(),
+		hc.cipheropts, hc.opts)
+
+	// [Bob, step 1-3], from which we read cipher text
+	b := big.NewInt(0)
+	_, err = fmt.Fscanln(c, b)
+	if err != nil {
+		return err
+	}
+	log.Printf("[Got server ciphertext:0x%x]\n", b.Bytes())
+
+	// Read cipheropts, session opts
+	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+		&hc.cipheropts, &hc.opts)
+	if err != nil {
+		return err
+	}
+
+	// Alice, step 3: Decrypt the KEM cipher text.
+	aliceSharedSecret := alicePrivateKey.KEMDecrypt(b.Bytes())
+
+	log.Printf("[Derived sharedSecret:0x%x]\n", aliceSharedSecret)
+	hc.r, hc.rm, err = hc.getStream(aliceSharedSecret)
+	hc.w, hc.wm, err = hc.getStream(aliceSharedSecret)
+	return
 }
 
 func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
@@ -251,13 +299,47 @@ func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
 	h.ComputeFA()
 	log.Printf("**(c)** FA:%s\n", h.FA())
 
-	hc.r, hc.rm, err = hc.getStream(h.FA())
-	hc.w, hc.wm, err = hc.getStream(h.FA())
+	hc.r, hc.rm, err = hc.getStream(h.FA().Bytes())
+	hc.w, hc.wm, err = hc.getStream(h.FA().Bytes())
 	return
 }
 
 func Kyber768AcceptSetup(c *net.Conn, hc *Conn) (err error) {
-	return errors.New("NOT IMPLEMENTED")
+	//h := hkex.New(0, 0)
+	// Bob, step 1: Deserialize Alice's public key from the binary encoding.
+	alicePublicKey := big.NewInt(0)
+	_, err = fmt.Fscanln(*c, alicePublicKey)
+	log.Printf("[Got client pubKey:0x%x\n]", alicePublicKey)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fscanf(*c, "%08x:%08x\n",
+		&hc.cipheropts, &hc.opts)
+	log.Printf("[Got cipheropts, opts:%v, %v]", hc.cipheropts, hc.opts)
+	if err != nil {
+		return err
+	}
+
+	peerPublicKey, err := kyber.Kyber768.PublicKeyFromBytes(alicePublicKey.Bytes())
+	if err != nil {
+		panic(err)
+	}
+
+	// Bob, step 2: Generate the KEM cipher text and shared secret.
+	r := new(randReader)
+	cipherText, bobSharedSecret, err := peerPublicKey.KEMEncrypt(r)
+	if err != nil {
+		panic(err)
+	}
+
+	// Bob, step 3: Send the cipher text to Alice (Not shown).
+	fmt.Fprintf(*c, "0x%x\n%08x:%08x\n", cipherText,
+		hc.cipheropts, hc.opts)
+
+	log.Printf("[Derived sharedSecret:0x%x]\n", bobSharedSecret)
+	hc.r, hc.rm, err = hc.getStream(bobSharedSecret)
+	hc.w, hc.wm, err = hc.getStream(bobSharedSecret)
+	return
 }
 
 func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
@@ -286,8 +368,8 @@ func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 	fmt.Fprintf(*c, "0x%s\n%08x:%08x\n", h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
-	hc.r, hc.rm, err = hc.getStream(h.FA())
-	hc.w, hc.wm, err = hc.getStream(h.FA())
+	hc.r, hc.rm, err = hc.getStream(h.FA().Bytes())
+	hc.w, hc.wm, err = hc.getStream(h.FA().Bytes())
 	return
 }
 
@@ -306,7 +388,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err er
 	if err != nil {
 		return Conn{}, err
 	}
-	
+
 	// Init hkexnet.Conn hc over net.Conn c
 	ret, err := _new(getkexalgnum(extensions...), &c)
 	if err != nil {

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"hash"
 	"log"
-	"math/big"
 
 	"golang.org/x/crypto/blowfish"
 	"golang.org/x/crypto/twofish"
@@ -33,7 +32,7 @@ import (
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
-func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash, err error) {
+func (hc Conn) getStream(keymat []byte) (rc cipher.Stream, mc hash.Hash, err error) {
 	var key []byte
 	var block cipher.Block
 	var iv []byte
@@ -44,23 +43,23 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash, err e
 	// is >= 2*cipher.BlockSize (enough for both key and iv)
 	switch copts {
 	case CAlgAES256:
-		key = keymat.Bytes()[0:aes.BlockSize]
+		key = keymat[0:aes.BlockSize]
 		block, err = aes.NewCipher(key)
 		ivlen = aes.BlockSize
-		iv = keymat.Bytes()[aes.BlockSize : aes.BlockSize+ivlen]
+		iv = keymat[aes.BlockSize : aes.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher AES_256 (%d)]\n", copts)
 		break
 	case CAlgTwofish128:
-		key = keymat.Bytes()[0:twofish.BlockSize]
+		key = keymat[0:twofish.BlockSize]
 		block, err = twofish.NewCipher(key)
 		ivlen = twofish.BlockSize
-		iv = keymat.Bytes()[twofish.BlockSize : twofish.BlockSize+ivlen]
+		iv = keymat[twofish.BlockSize : twofish.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
 		break
 	case CAlgBlowfish64:
-		key = keymat.Bytes()[0:blowfish.BlockSize]
+		key = keymat[0:blowfish.BlockSize]
 		block, err = blowfish.NewCipher(key)
 		ivlen = blowfish.BlockSize
 		// N.b. Bounds enforcement of differing cipher algorithms
@@ -72,7 +71,7 @@ func (hc Conn) getStream(keymat *big.Int) (rc cipher.Stream, mc hash.Hash, err e
 		//
 		// I assume the other two check bounds and only
 		// copy what's needed whereas blowfish does no such check.
-		iv = keymat.Bytes()[blowfish.BlockSize : blowfish.BlockSize+ivlen]
+		iv = keymat[blowfish.BlockSize : blowfish.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
 		break
