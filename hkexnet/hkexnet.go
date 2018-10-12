@@ -141,15 +141,37 @@ func (hc *Conn) SetOpts(opts uint32) {
 }
 
 func getkexalgnum(extensions ...string) (k KEXAlg) {
+	k = KEX_HERRADURA256 // default
 	for _, s := range extensions {
 		switch s {
-		case "KEX_HERRADURA":
-		default:
-			log.Println("[extension arg = KEX_HERRADURA]")
-			k = KEX_HERRADURA
+		case "KEX_HERRADURA256":
+			log.Println("[extension arg = KEX_HERRADURA256]")
+			k = KEX_HERRADURA256
+			break //out of for
+		case "KEX_HERRADURA512":
+			log.Println("[extension arg = KEX_HERRADURA512]")
+			k = KEX_HERRADURA512
+			break //out of for
+		case "KEX_HERRADURA1024":
+			log.Println("[extension arg = KEX_HERRADURA1024]")
+			k = KEX_HERRADURA1024
+			break //out of for
+		case "KEX_HERRADURA2048":
+			log.Println("[extension arg = KEX_HERRADURA2048]")
+			k = KEX_HERRADURA2048
+			break //out of for
+		case "KEX_KYBER512":
+			log.Println("[extension arg = KEX_KYBER512]")
+			k = KEX_KYBER512
+			break //out of for
 		case "KEX_KYBER768":
 			log.Println("[extension arg = KEX_KYBER768]")
 			k = KEX_KYBER768
+			break //out of for
+		case "KEX_KYBER1024":
+			log.Println("[extension arg = KEX_KYBER1024]")
+			k = KEX_KYBER1024
+			break //out of for
 		}
 	}
 	return
@@ -170,16 +192,24 @@ func _new(kexAlg KEXAlg, conn *net.Conn) (hc *Conn, e error) {
 	*hc.closeStat = CSEStillOpen // open or prematurely-closed status
 
 	// Set up KEx/KEM-specifics
-	switch hc.kex {
-	case KEX_HERRADURA:
-		return hc, nil //HKExAcceptSetup(hc.c, hc)
+	switch kexAlg {
+	case KEX_HERRADURA256:
+		fallthrough
+	case KEX_HERRADURA512:
+		fallthrough
+	case KEX_HERRADURA1024:
+		fallthrough
+	case KEX_HERRADURA2048:
 		log.Printf("[KEx alg %d accepted]\n", kexAlg)
+	case KEX_KYBER512:
+		fallthrough
 	case KEX_KYBER768:
-		return hc, nil //Kyber768AcceptSetup(hc.c, hc)
+		fallthrough
+	case KEX_KYBER1024:
 		log.Printf("[KEx alg %d accepted]\n", kexAlg)
 	default:
-		return hc, nil //HKExAcceptSetup(hc.c, hc)
-		log.Printf("[KEx alg %d accepted]\n", kexAlg)
+		hc.kex = KEX_HERRADURA256
+		log.Printf("[KEx alg %d ?? defaults to %d]\n", kexAlg, hc.kex)
 	}
 	return
 }
@@ -197,30 +227,24 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 			log.Println("[extension arg = C_AES_256]")
 			hc.cipheropts &= (0xFFFFFF00)
 			hc.cipheropts |= CAlgAES256
-			break
 		case "C_TWOFISH_128":
 			log.Println("[extension arg = C_TWOFISH_128]")
 			hc.cipheropts &= (0xFFFFFF00)
 			hc.cipheropts |= CAlgTwofish128
-			break
 		case "C_BLOWFISH_64":
 			log.Println("[extension arg = C_BLOWFISH_64]")
 			hc.cipheropts &= (0xFFFFFF00)
 			hc.cipheropts |= CAlgBlowfish64
-			break
 		case "H_SHA256":
 			log.Println("[extension arg = H_SHA256]")
 			hc.cipheropts &= (0xFFFF00FF)
 			hc.cipheropts |= (HmacSHA256 << 8)
-			break
 		case "H_SHA512":
 			log.Println("[extension arg = H_SHA512]")
 			hc.cipheropts &= (0xFFFF00FF)
 			hc.cipheropts |= (HmacSHA512 << 8)
-			break
-		default:
-			log.Printf("[Dial ext \"%s\" ignored]\n", s)
-			break
+			//default:
+			//	log.Printf("[Dial ext \"%s\" ignored]\n", s)
 		}
 	}
 }
@@ -235,13 +259,24 @@ func (r randReader) Read(b []byte) (n int, e error) {
 	return
 }
 
-func Kyber768DialSetup(c net.Conn, hc *Conn) (err error) {
-	//h := hkex.New(0, 0)
+func KyberDialSetup(c net.Conn, hc *Conn) (err error) {
 	// Send hkexnet.Conn parameters to remote side
 
 	// Alice, step 1: Generate a key pair.
 	r := new(randReader)
-	alicePublicKey, alicePrivateKey, err := kyber.Kyber768.GenerateKeyPair(r)
+	var alicePublicKey *kyber.PublicKey
+	var alicePrivateKey *kyber.PrivateKey
+	switch hc.kex {
+	case KEX_KYBER512:
+		alicePublicKey, alicePrivateKey, err = kyber.Kyber512.GenerateKeyPair(r)
+	case KEX_KYBER768:
+		alicePublicKey, alicePrivateKey, err = kyber.Kyber768.GenerateKeyPair(r)
+	case KEX_KYBER1024:
+		alicePublicKey, alicePrivateKey, err = kyber.Kyber1024.GenerateKeyPair(r)
+	default:
+		alicePublicKey, alicePrivateKey, err = kyber.Kyber768.GenerateKeyPair(r)
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -275,7 +310,20 @@ func Kyber768DialSetup(c net.Conn, hc *Conn) (err error) {
 }
 
 func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
-	h := hkex.New(0, 0)
+	var h *hkex.HerraduraKEx
+	switch hc.kex {
+	case KEX_HERRADURA256:
+		h = hkex.New(256, 64)
+	case KEX_HERRADURA512:
+		h = hkex.New(512, 128)
+	case KEX_HERRADURA1024:
+		h = hkex.New(1024, 256)
+	case KEX_HERRADURA2048:
+		h = hkex.New(2048, 512)
+	default:
+		h = hkex.New(256, 64)
+	}
+
 	// Send hkexnet.Conn parameters to remote side
 	// d is value for Herradura key exchange
 	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", h.D().Text(16),
@@ -304,8 +352,7 @@ func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
 	return
 }
 
-func Kyber768AcceptSetup(c *net.Conn, hc *Conn) (err error) {
-	//h := hkex.New(0, 0)
+func KyberAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 	// Bob, step 1: Deserialize Alice's public key from the binary encoding.
 	alicePublicKey := big.NewInt(0)
 	_, err = fmt.Fscanln(*c, alicePublicKey)
@@ -320,7 +367,18 @@ func Kyber768AcceptSetup(c *net.Conn, hc *Conn) (err error) {
 		return err
 	}
 
-	peerPublicKey, err := kyber.Kyber768.PublicKeyFromBytes(alicePublicKey.Bytes())
+	var peerPublicKey *kyber.PublicKey
+	switch hc.kex {
+	case KEX_KYBER512:
+		peerPublicKey, err = kyber.Kyber512.PublicKeyFromBytes(alicePublicKey.Bytes())
+	case KEX_KYBER768:
+		peerPublicKey, err = kyber.Kyber768.PublicKeyFromBytes(alicePublicKey.Bytes())
+	case KEX_KYBER1024:
+		peerPublicKey, err = kyber.Kyber1024.PublicKeyFromBytes(alicePublicKey.Bytes())
+	default:
+		peerPublicKey, err = kyber.Kyber768.PublicKeyFromBytes(alicePublicKey.Bytes())
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -343,7 +401,20 @@ func Kyber768AcceptSetup(c *net.Conn, hc *Conn) (err error) {
 }
 
 func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
-	h := hkex.New(0, 0)
+	var h *hkex.HerraduraKEx
+	switch hc.kex {
+	case KEX_HERRADURA256:
+		h = hkex.New(256, 64)
+	case KEX_HERRADURA512:
+		h = hkex.New(512, 128)
+	case KEX_HERRADURA1024:
+		h = hkex.New(1024, 256)
+	case KEX_HERRADURA2048:
+		h = hkex.New(2048, 512)
+	default:
+		h = hkex.New(256, 64)
+	}
+
 	// Read in hkexnet.Conn parameters over raw Conn c
 	// d is value for Herradura key exchange
 	d := big.NewInt(0)
@@ -403,21 +474,28 @@ func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err er
 	// Perform Key Exchange according to client-request algorithm
 	fmt.Fprintf(c, "%02x\n", hc.kex)
 	switch hc.kex {
-	case KEX_HERRADURA:
-		fmt.Println("[HKExDialSetup()]")
+	case KEX_HERRADURA256:
+		fallthrough
+	case KEX_HERRADURA512:
+		fallthrough
+	case KEX_HERRADURA1024:
+		fallthrough
+	case KEX_HERRADURA2048:
+		log.Printf("[Setting up for KEX_HERRADURA %d]\n", hc.kex)
 		if HKExDialSetup(c, &hc) != nil {
 			return Conn{}, nil
 		}
+	case KEX_KYBER512:
+		fallthrough
 	case KEX_KYBER768:
-		fmt.Println("[Kyber768DialSetup()]")
-		if Kyber768DialSetup(c, &hc) != nil {
+		fallthrough
+	case KEX_KYBER1024:
+		log.Printf("[Setting up for KEX_KYBER %d]\n", hc.kex)
+		if KyberDialSetup(c, &hc) != nil {
 			return Conn{}, nil
 		}
 	default:
-		fmt.Println("[Default HKExDialSetup()]")
-		if HKExDialSetup(c, &hc) != nil {
-			return Conn{}, nil
-		}
+		return Conn{}, nil
 	}
 	return
 }
@@ -530,7 +608,9 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 
 	// Read KEx alg proposed by client
 	var kexAlg KEXAlg
-	_, err = fmt.Fscanln(c, &kexAlg)
+	//! NB. Was using fmt.FScanln() here, but integers with a leading zero
+	//  were being mis-scanned? (is it an octal thing? Investigate.)
+	_, err = fmt.Fscanf(c, "%02x\n", &kexAlg)
 	if err != nil {
 		return Conn{}, err
 	}
@@ -544,24 +624,28 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	hc = *ret
 
 	switch hc.kex {
-	case KEX_HERRADURA:
-		log.Println("[Setting up for KEX_HERRADURA]")
+	case KEX_HERRADURA256:
+		fallthrough
+	case KEX_HERRADURA512:
+		fallthrough
+	case KEX_HERRADURA1024:
+		fallthrough
+	case KEX_HERRADURA2048:
+		log.Printf("[Setting up for KEX_HERRADURA %d]\n", hc.kex)
 		if HKExAcceptSetup(&c, &hc) != nil {
-			log.Println("[ERROR - KEX_HERRADURA]")
 			return Conn{}, nil
 		}
+	case KEX_KYBER512:
+		fallthrough
 	case KEX_KYBER768:
-		log.Println("[Setting up for KEX_KYBER768]")
-		if Kyber768AcceptSetup(&c, &hc) != nil {
-			log.Println("[ERROR - KEX_KYBER768]")
+		fallthrough
+	case KEX_KYBER1024:
+		log.Printf("[Setting up for KEX_KYBER %d]\n", hc.kex)
+		if KyberAcceptSetup(&c, &hc) != nil {
 			return Conn{}, nil
 		}
 	default:
-		log.Println("[unknown alg, Setting up for KEX_HERRADURA]")
-		if HKExAcceptSetup(&c, &hc) != nil {
-			log.Println("[ERROR - default KEX_HERRADURA]")
-			return Conn{}, nil
-		}
+		return Conn{}, nil
 	}
 	log.Println("[hc.Accept successful]")
 	return

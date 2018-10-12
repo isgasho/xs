@@ -8,10 +8,22 @@
 package hkexnet
 
 const (
-	KEX_HERRADURA = iota // this MUST be first for default if omitted in ctor
+	KEX_HERRADURA256 = iota // this MUST be first for default if omitted in ctor
+	KEX_HERRADURA512
+	KEX_HERRADURA1024
+	KEX_HERRADURA2048
+	KEX_resvd4
+	KEX_resvd5
+	KEX_resvd6
+	KEX_resvd7
+	KEX_KYBER512
 	KEX_KYBER768
-	//KEX_DH
-	//KEX_ETC
+	KEX_KYBER1024
+	KEX_resvd11
+	KEX_resvd12
+	KEX_resvd13
+	KEX_resvd14
+	KEX_resvd15
 )
 
 // Sent from client to server in order to specify which
@@ -26,6 +38,7 @@ const (
 	CSEExecFail    // cmd.Start() (exec) failed
 	CSEPtyExecFail // pty.Start() (exec w/pty) failed
 )
+
 // Extended (>255 UNIX exit status) codes
 // This indicate channel-related or internal errors
 type CSExtendedCode uint32
@@ -37,6 +50,7 @@ const (
 	CSOExitStatus         // Remote cmd exit status
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
+
 // Channel status type
 type CSOType uint32
 
@@ -49,6 +63,7 @@ const (
 	CAlgBlowfish64 // golang.org/x/crypto/blowfish
 	CAlgNoneDisallowed
 )
+
 // Available ciphers for hkex.Conn
 type CSCipherAlg uint32
 
@@ -57,5 +72,6 @@ const (
 	HmacSHA512
 	HmacNoneDisallowed
 )
+
 // Available HMACs for hkex.Conn (TODO: not currently used)
 type CSHmacAlg uint32
