@@ -484,7 +484,7 @@ func main() {
 			idx := strings.Index(string(ab), remoteHost)
 			//fmt.Printf("auth entry idx:%d\n", idx)
 			if idx >= 0 {
-				fmt.Fprintln(os.Stderr, "[authtoken]")
+				//fmt.Fprintln(os.Stderr, "[authtoken]")
 				ab = ab[idx:]
 				entries := strings.SplitN(string(ab), "\n", -1)
 				//if len(entries) > 0 {

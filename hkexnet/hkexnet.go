@@ -277,26 +277,26 @@ func KyberDialSetup(c net.Conn, hc *Conn) (err error) {
 	}
 
 	// Alice, step 2: Send the public key to Bob
-	fmt.Fprintf(c, "0x%x\n%08x:%08x\n", alicePublicKey.Bytes(),
+	fmt.Fprintf(c, "0x%x\n0x%x:0x%x\n", alicePublicKey.Bytes(),
 		hc.cipheropts, hc.opts)
 
 	// [Bob, step 1-3], from which we read cipher text
-	b := big.NewInt(0)
-	_, err = fmt.Fscanln(c, b)
-	if err != nil {
-		return err
-	}
-	log.Printf("[Got server ciphertext:0x%x]\n", b.Bytes())
+	cipherB := make([]byte, 4096)
+	fmt.Fscanf(c, "0x%x\n", &cipherB)
+	//if err != nil {
+	//	return err
+	//}
+	log.Printf("[Got server ciphertext[]:%v]\n", cipherB)
 
 	// Read cipheropts, session opts
-	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+	_, err = fmt.Fscanf(c, "0x%x:0x%x\n",
 		&hc.cipheropts, &hc.opts)
 	if err != nil {
 		return err
 	}
 
 	// Alice, step 3: Decrypt the KEM cipher text.
-	aliceSharedSecret := alicePrivateKey.KEMDecrypt(b.Bytes())
+	aliceSharedSecret := alicePrivateKey.KEMDecrypt(cipherB)
 
 	log.Printf("[Derived sharedSecret:0x%x]\n", aliceSharedSecret)
 	hc.r, hc.rm, err = hc.getStream(aliceSharedSecret)
@@ -321,16 +321,16 @@ func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
 
 	// Send hkexnet.Conn parameters to remote side
 	// d is value for Herradura key exchange
-	fmt.Fprintf(c, "0x%s\n%08x:%08x\n", h.D().Text(16),
+	fmt.Fprintf(c, "0x%s\n0x%x:0x%x\n", h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
+	// Read peer D over net.Conn (c)
 	d := big.NewInt(0)
 	_, err = fmt.Fscanln(c, d)
 	if err != nil {
 		return err
 	}
-	// Read peer D over net.Conn (c)
-	_, err = fmt.Fscanf(c, "%08x:%08x\n",
+	_, err = fmt.Fscanf(c, "0x%x:0x%x\n",
 		&hc.cipheropts, &hc.opts)
 	if err != nil {
 		return err
@@ -355,7 +355,7 @@ func KyberAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fscanf(*c, "%08x:%08x\n",
+	_, err = fmt.Fscanf(*c, "0x%x:0x%x\n",
 		&hc.cipheropts, &hc.opts)
 	log.Printf("[Got cipheropts, opts:%v, %v]", hc.cipheropts, hc.opts)
 	if err != nil {
@@ -385,8 +385,9 @@ func KyberAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 		panic(err)
 	}
 
-	// Bob, step 3: Send the cipher text to Alice (Not shown).
-	fmt.Fprintf(*c, "0x%x\n%08x:%08x\n", cipherText,
+	// Bob, step 3: Send the cipher text to Alice.
+	//fmt.Println("cipherText:",cipherText)
+	fmt.Fprintf(*c, "0x%x\n0x%x:0x%x\n", cipherText,
 		hc.cipheropts, hc.opts)
 
 	log.Printf("[Derived sharedSecret:0x%x]\n", bobSharedSecret)
@@ -418,7 +419,7 @@ func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fscanf(*c, "%08x:%08x\n",
+	_, err = fmt.Fscanf(*c, "0x%x:0x%x\n",
 		&hc.cipheropts, &hc.opts)
 	log.Printf("[Got cipheropts, opts:%v, %v]", hc.cipheropts, hc.opts)
 	if err != nil {
@@ -431,7 +432,7 @@ func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 	log.Printf("**(s)** FA:%s\n", h.FA())
 
 	// Send D and cipheropts/conn_opts to peer
-	fmt.Fprintf(*c, "0x%s\n%08x:%08x\n", h.D().Text(16),
+	fmt.Fprintf(*c, "0x%s\n0x%x:0x%x\n", h.D().Text(16),
 		hc.cipheropts, hc.opts)
 
 	hc.r, hc.rm, err = hc.getStream(h.FA().Bytes())
@@ -490,7 +491,7 @@ func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err er
 			return Conn{}, nil
 		}
 	default:
-		return Conn{}, nil
+		return Conn{}, err
 	}
 	return
 }
@@ -628,7 +629,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	case KEX_HERRADURA2048:
 		log.Printf("[Setting up for KEX_HERRADURA %d]\n", hc.kex)
 		if HKExAcceptSetup(&c, &hc) != nil {
-			return Conn{}, nil
+			return Conn{}, err
 		}
 	case KEX_KYBER512:
 		fallthrough
@@ -637,10 +638,10 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	case KEX_KYBER1024:
 		log.Printf("[Setting up for KEX_KYBER %d]\n", hc.kex)
 		if KyberAcceptSetup(&c, &hc) != nil {
-			return Conn{}, nil
+			return Conn{}, err
 		}
 	default:
-		return Conn{}, nil
+		return Conn{}, err
 	}
 	log.Println("[hc.Accept successful]")
 	return
