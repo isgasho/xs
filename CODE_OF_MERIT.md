@@ -1,4 +1,4 @@
-# Code of Merit
+# Code of Merit (1.0-r1)
 
 1. The project creators, lead developers, core team, constitute
 the managing members of the project and have final say in every decision
@@ -39,11 +39,11 @@ of the originator to provide requested context.
 in the scope of the project. This Code of Merit does not take precedence over
 governing law.
 
-11a. If the algorithms implemented in this project (eg., cryptography)
-are illegal or prohibited in your local jurisdiction, it is your personal
-responsibility to consider how, or if, you should attempt to participate in this
-project. Regardless of the status of those persons mentioned in 1. such persons
-disclaim all liability for others' actions and decisions in this regard.
+    (11.a) If the algorithms implemented in this project (eg., cryptography)
+  are illegal or prohibited in your local jurisdiction, it is your personal
+  responsibility to consider how, or if, you should attempt to participate in this
+  project. Regardless of the status of those persons mentioned in 1. such persons
+  disclaim all liability for others' actions and decisions in this regard.
 
 12. This Code of Merit governs the technical procedures of the project not the 
 activities outside of it. 
@@ -55,4 +55,4 @@ to the project. Any intent to deviate the project from its original purpose
 of existence will constitute grounds for remedial action which may include
 expulsion from the project.
 
-This document is the Code of Merit (http://code-of-merit.org), version 1.0.
+This document is based upon the Code of Merit (http://code-of-merit.org), version 1.0.
