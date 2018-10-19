@@ -39,6 +39,12 @@ of the originator to provide requested context.
 in the scope of the project. This Code of Merit does not take precedence over
 governing law.
 
+11a. If the algorithms implemented in this project (eg., cryptography)
+are illegal or prohibited in your local jurisdiction, it is your personal
+responsibility to consider how, or if, you should attempt to participate in this
+project. Regardless of the status of those persons mentioned in 1. such persons
+disclaim all liability for others' actions and decisions in this regard.
+
 12. This Code of Merit governs the technical procedures of the project not the 
 activities outside of it. 
 
