@@ -29,6 +29,27 @@ import (
 	_ "crypto/sha512"
 )
 
+// Expand keymat, if necessary, to a minimum of 2x(blocksize).
+// Keymat is used for initial key and the IV, hence the 2x.
+// This is occasionally necessary for smaller modes of KEX algorithms
+// (eg., KEX_HERRADURA256); perhaps an indication these should be
+// avoided in favour of larger modes.
+func expandKeyMat(keymat []byte, blocksize int) []byte {
+	if len(keymat) < 2*blocksize {
+		halg := crypto.SHA256
+		mc := halg.New()
+		if !halg.Available() {
+			log.Fatal("hash not available!")
+		}
+		_, _ = mc.Write(keymat)
+		var xpand []byte
+		xpand = mc.Sum(xpand)
+		keymat = append(keymat, xpand...)
+		log.Println("[NOTE: keymat short - applying key expansion using SHA256]")
+	}
+	return keymat
+}
+
 /* Support functionality to set up encryption after a channel has
 been negotiated via hkexnet.go
 */
@@ -43,6 +64,7 @@ func (hc Conn) getStream(keymat []byte) (rc cipher.Stream, mc hash.Hash, err err
 	// is >= 2*cipher.BlockSize (enough for both key and iv)
 	switch copts {
 	case CAlgAES256:
+		keymat = expandKeyMat(keymat, aes.BlockSize)
 		key = keymat[0:aes.BlockSize]
 		block, err = aes.NewCipher(key)
 		ivlen = aes.BlockSize
@@ -51,6 +73,7 @@ func (hc Conn) getStream(keymat []byte) (rc cipher.Stream, mc hash.Hash, err err
 		log.Printf("[cipher AES_256 (%d)]\n", copts)
 		break
 	case CAlgTwofish128:
+		keymat = expandKeyMat(keymat, twofish.BlockSize)
 		key = keymat[0:twofish.BlockSize]
 		block, err = twofish.NewCipher(key)
 		ivlen = twofish.BlockSize
@@ -59,6 +82,7 @@ func (hc Conn) getStream(keymat []byte) (rc cipher.Stream, mc hash.Hash, err err
 		log.Printf("[cipher TWOFISH_128 (%d)]\n", copts)
 		break
 	case CAlgBlowfish64:
+		keymat = expandKeyMat(keymat, blowfish.BlockSize)
 		key = keymat[0:blowfish.BlockSize]
 		block, err = blowfish.NewCipher(key)
 		ivlen = blowfish.BlockSize
