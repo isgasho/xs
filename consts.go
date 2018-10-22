@@ -7,5 +7,5 @@
 // golang implementation by Russ Magee (rmagee_at_gmail.com)
 package hkexsh
 
-const Version = "0.5pre (NO WARRANTY)"
+const Version = "0.6pre (NO WARRANTY)"
 
