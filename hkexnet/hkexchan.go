@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/crypto/blowfish"
 	"golang.org/x/crypto/twofish"
+	"blitter.com/go/cryptmt"
 	// hash algos must be manually imported thusly:
 	// (Would be nice if the golang pkg docs were more clear
 	// on this...)
@@ -34,6 +35,9 @@ import (
 // This is occasionally necessary for smaller modes of KEX algorithms
 // (eg., KEX_HERRADURA256); perhaps an indication these should be
 // avoided in favour of larger modes.
+//
+// This is used for block ciphers; stream ciphers should do their
+// own key expansion.
 func expandKeyMat(keymat []byte, blocksize int) []byte {
 	if len(keymat) < 2*blocksize {
 		halg := crypto.SHA256
@@ -98,6 +102,10 @@ func (hc Conn) getStream(keymat []byte) (rc cipher.Stream, mc hash.Hash, err err
 		iv = keymat[blowfish.BlockSize : blowfish.BlockSize+ivlen]
 		rc = cipher.NewOFB(block, iv)
 		log.Printf("[cipher BLOWFISH_64 (%d)]\n", copts)
+		break
+	case CAlgCryptMT1:
+		rc = cryptmt.NewCipher(keymat)
+		log.Printf("[cipher CRYPTMT1 (%d)]\n", copts)
 		break
 	default:
 		log.Printf("[invalid cipher (%d)]\n", copts)

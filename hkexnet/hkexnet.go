@@ -230,6 +230,10 @@ func (hc *Conn) applyConnExtensions(extensions ...string) {
 			log.Println("[extension arg = C_BLOWFISH_64]")
 			hc.cipheropts &= (0xFFFFFF00)
 			hc.cipheropts |= CAlgBlowfish64
+		case "C_CRYPTMT1":
+			log.Println("[extension arg = C_CRYPTMT1]")
+			hc.cipheropts &= (0xFFFFFF00)
+			hc.cipheropts |= CAlgCryptMT1
 		case "H_SHA256":
 			log.Println("[extension arg = H_SHA256]")
 			hc.cipheropts &= (0xFFFF00FF)

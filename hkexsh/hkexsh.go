@@ -372,7 +372,7 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
-	flag.StringVar(&cAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\"]")
+	flag.StringVar(&cAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\" | \"C_CRYPTMT1\"]")
 	flag.StringVar(&hAlg, "m", "H_SHA256", "`hmac` [\"H_SHA256\"]")
 	flag.StringVar(&kAlg, "k", "KEX_HERRADURA256", "`kex` [\"KEX_HERRADURA{256/512/1024/2048}\" | \"KEX_KYBER{512/768/1024}\"]")
 	flag.UintVar(&port, "p", 2000, "`port`")
