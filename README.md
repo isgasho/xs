@@ -22,6 +22,7 @@ Currently supported session encryption and hmac algorithms:
 * AES-256
 * Twofish-128
 * Blowfish-64
+* CryptMTv1 (https://eprint.iacr.org/2005/165.pdf)
 * HMAC-SHA256
 * HMAC-SHA512
 
@@ -68,6 +69,8 @@ Dependencies:
 * [github.com/jameskeane/bcrypt](http://github.com/jameskeane/bcrypt) //password storage/auth
 * [blitter.com/go/goutmp](https://blitter.com/gogs/Russtopia/goutmp) // wtmp/lastlog C bindings
 * [https://git.schwanenlied.me/yawning/kyber](https://git.schwanenlied.me/yawning/kyber) // golang Kyber KEM
+* [blitter.com/go/mtwist](https://blitter.com/gogs/RLabs/mtwist) // 64-bit Mersenne Twister PRNG
+* [blitter.com/go/cryptmt](https://blitter.com/gogs/RLabs/cryptmt) // CryptMTv1 stream cipher
 
 Get source code
 --
