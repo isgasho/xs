@@ -30,8 +30,10 @@ const (
 // algo shall be used (eg., HerraduraKEx, [TODO: others...])
 type KEXAlg uint8
 
+// Extended exit status codes - indicate comm/pty issues
+// rather than remote end normal UNIX exit codes
 const (
-	CSENone        = 32 + iota
+	CSENone        = 1024 + iota
 	CSEBadAuth     // Failed login password
 	CSETruncCSO    // No CSOExitStatus in payload
 	CSEStillOpen   // Channel closed unexpectedly
@@ -43,6 +45,7 @@ const (
 // This indicate channel-related or internal errors
 type CSExtendedCode uint32
 
+// Channel Status Op bytes - to distinguish packet types
 const (
 	CSONone        = iota // No error, normal packet
 	CSOHmacInvalid        // HMAC mismatch detected on remote end
@@ -51,7 +54,7 @@ const (
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
 
-// Channel status type
+// Channel status Op byte type
 type CSOType uint32
 
 //TODO: this should be small (max unfragmented packet size?)
