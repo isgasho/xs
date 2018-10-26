@@ -1,6 +1,6 @@
 .PHONY: info clean common client server passwd subpkgs
 
-SUBPKGS = spinsult hkexnet herradurakex
+SUBPKGS = logger spinsult hkexnet herradurakex
 TOOLS = hkexpasswd hkexsh hkexshd
 SUBDIRS = $(LIBS) $(TOOLS)
 
@@ -28,12 +28,16 @@ common:
 client: common
 	$(MAKE) -C hkexsh
 
-ifneq ($(MSYSTEM),)
-server: common
-	echo "hkexshd server not (yet) supported on Windows"
-else
+ifeq ($(MSYSTEM),)
+ifneq ($(GOOS),windows)
 server: common
 	$(MAKE) -C hkexshd
+else
+	echo "Cross-build of hkexshd server for Windows not yet supported"
+endif
+else
+server: common
+	echo "hkexshd server not (yet) supported on Windows"
 endif
 
 passwd: common

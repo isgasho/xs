@@ -16,7 +16,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"log/syslog"
 	"os"
 	"os/exec"
 	"os/user"
@@ -30,12 +29,13 @@ import (
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
 	"blitter.com/go/hkexsh/spinsult"
+	"blitter.com/go/hkexsh/logger"
 	isatty "github.com/mattn/go-isatty"
 )
 
 var (
 	wg  sync.WaitGroup
-	Log *syslog.Writer // reg. syslog output (no -d)
+	Log *logger.Writer // reg. syslog output (no -d)
 )
 
 // Get terminal size using 'stty' command
@@ -471,8 +471,8 @@ func main() {
 	// either the shell session or copy operation.
 	_ = shellMode
 
-	Log, _ = syslog.New(syslog.LOG_USER|syslog.LOG_DEBUG, "hkexsh")
-	hkexnet.Init(dbg, "hkexsh", syslog.LOG_USER|syslog.LOG_DEBUG)
+	Log, _ = logger.New(logger.LOG_USER|logger.LOG_DEBUG, "hkexsh")
+	hkexnet.Init(dbg, "hkexsh", logger.LOG_USER|logger.LOG_DEBUG)
 	if dbg {
 		log.SetOutput(Log)
 	} else {
