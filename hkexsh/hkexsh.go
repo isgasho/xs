@@ -16,6 +16,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"log/syslog"
 	"os"
 	"os/exec"
 	"os/user"
@@ -33,7 +34,8 @@ import (
 )
 
 var (
-	wg sync.WaitGroup
+	wg  sync.WaitGroup
+	Log *syslog.Writer // reg. syslog output (no -d)
 )
 
 // Get terminal size using 'stty' command
@@ -469,12 +471,14 @@ func main() {
 	// either the shell session or copy operation.
 	_ = shellMode
 
+	Log, _ = syslog.New(syslog.LOG_USER|syslog.LOG_DEBUG, "hkexsh")
+	hkexnet.Init(dbg, "hkexsh", syslog.LOG_USER|syslog.LOG_DEBUG)
 	if dbg {
-		log.SetOutput(os.Stdout)
+		log.SetOutput(Log)
 	} else {
 		log.SetOutput(ioutil.Discard)
 	}
-
+	
 	if !gopt {
 		// See if we can log in via an auth token
 		u, _ := user.Current()

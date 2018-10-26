@@ -37,7 +37,9 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/ioutil"
 	"log"
+	"log/syslog"
 	"math/big"
 	"math/rand"
 	"net"
@@ -94,6 +96,26 @@ type (
 		dBuf      *bytes.Buffer //decrypt buffer for Read()
 	}
 )
+
+var (
+	Log *syslog.Writer // reg. syslog output (no -d)
+)
+
+func _initLogging(d bool, c string, f syslog.Priority) {
+	if Log == nil {
+		Log, _ = syslog.New(f, fmt.Sprintf("%s:hkexnet", c))
+	}
+	if d {
+		log.SetFlags(0) // syslog will have date,time
+		log.SetOutput(Log)
+	} else {
+		log.SetOutput(ioutil.Discard)
+	}
+}
+
+func Init(d bool, c string, f syslog.Priority) {
+	_initLogging(d, c, f)
+}
 
 func (hc Conn) GetStatus() CSOType {
 	return *hc.closeStat
@@ -454,6 +476,10 @@ func HKExAcceptSetup(c *net.Conn, hc *Conn) (err error) {
 //
 //   "H_SHA256"
 func Dial(protocol string, ipport string, extensions ...string) (hc Conn, err error) {
+	if Log == nil {
+		Init(false, "client", syslog.LOG_DAEMON|syslog.LOG_DEBUG)
+	}
+
 	// Open raw Conn c
 	c, err := net.Dial(protocol, ipport)
 	if err != nil {
@@ -508,7 +534,7 @@ func (hc *Conn) Close() (err error) {
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
 	hc.WritePacket(s, CSOExitStatus)
 	err = (*hc.c).Close()
-	log.Println("[Conn Closing]")
+	Log.Notice(fmt.Sprintln("[Conn Closing]"))
 	return
 }
 
@@ -570,11 +596,15 @@ type HKExListener struct {
 //
 // See go doc net.Listen
 func Listen(protocol string, ipport string) (hl HKExListener, e error) {
+	if Log == nil {
+		Init(false, "server", syslog.LOG_DAEMON|syslog.LOG_DEBUG)
+	}
+
 	l, err := net.Listen(protocol, ipport)
 	if err != nil {
 		return HKExListener{nil}, err
 	}
-	log.Println("[Listening]")
+	Log.Notice(fmt.Sprintf("[Listening on %s]\n", ipport))
 	hl.l = l
 	return
 }
@@ -584,7 +614,7 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 //
 // See go doc net.Listener.Close
 func (hl HKExListener) Close() error {
-	log.Println("[Listener Closed]")
+	Log.Notice(fmt.Sprintln("[Listener Closed]"))
 	return hl.l.Close()
 }
 
@@ -604,7 +634,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	if err != nil {
 		return Conn{}, err
 	}
-	log.Println("[net.Listener Accepted]")
+	Log.Notice(fmt.Sprintln("[net.Listener Accepted]"))
 
 	// Read KEx alg proposed by client
 	var kexAlg KEXAlg
@@ -683,7 +713,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
 			if err == io.EOF || strings.HasSuffix(err.Error(), "use of closed network connection") {
-				log.Println("[Client hung up]")
+				Log.Notice(fmt.Sprintln("[Client hung up]"))
 			} else {
 				log.Println(err)
 			}
@@ -693,12 +723,12 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		err = binary.Read(*hc.c, binary.BigEndian, &payloadLen)
 		if err != nil {
 			if err.Error() != "EOF" {
-				log.Println("[2]unexpected Read() err:", err)
+				Log.Err(fmt.Sprintln("[2]unexpected Read() err:", err))
 			}
 		}
 
 		if payloadLen > MAX_PAYLOAD_LEN {
-			log.Printf("[Insane payloadLen:%v]\n", payloadLen)
+			Log.Err(fmt.Sprintf("[Insane payloadLen:%v]\n", payloadLen))
 			hc.Close()
 			return 1, errors.New("Insane payloadLen")
 		}
@@ -710,9 +740,9 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil && err.Error() != "EOF" {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				log.Println("[3]unexpected Read() err:", err)
+				Log.Err(fmt.Sprintln("[3]unexpected Read() err:", err))
 			} else {
-				log.Println("[Client hung up]")
+				Log.Notice(fmt.Sprintln("[Client hung up]"))
 			}
 		}
 
@@ -757,7 +787,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				if len(payloadBytes) > 0 {
 					hc.SetStatus(CSOType(binary.BigEndian.Uint32(payloadBytes)))
 				} else {
-					log.Println("[truncated payload, cannot determine CSOExitStatus]")
+					Log.Err(fmt.Sprintln("[truncated payload, cannot determine CSOExitStatus]"))
 					hc.SetStatus(CSETruncCSO)
 				}
 				hc.Close()
@@ -770,11 +800,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
 			if *hc.closeStat == CSETruncCSO {
-				log.Println("[cannot verify HMAC]")
+				Log.Err(fmt.Sprintln("[cannot verify HMAC]"))
 			} else {
 				// Log alert if hmac didn't match, corrupted channel
 				if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
-					fmt.Println("** ALERT - detected HMAC mismatch, possible channel tampering **")
+					Log.Err(fmt.Sprintln("** ALERT - detected HMAC mismatch, possible channel tampering **"))
 					_, _ = (*hc.c).Write([]byte{CSOHmacInvalid})
 				}
 			}
