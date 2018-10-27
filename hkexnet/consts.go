@@ -50,6 +50,8 @@ const (
 	CSONone        = iota // No error, normal packet
 	CSOHmacInvalid        // HMAC mismatch detected on remote end
 	CSOTermSize           // set term size (rows:cols)
+	CSOTunReq // client tunnel open request (dstport)
+	CSOTunAck // server tunnel open ack (tunport)
 	CSOExitStatus         // Remote cmd exit status
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )

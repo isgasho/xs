@@ -73,7 +73,29 @@ type (
 		szMax    uint // max size in bytes
 	}
 
-	//h          *hkex.HerraduraKEx // TODO: make an interface?
+	// Tunnels
+	// --
+	// 1. client is given (lport, remhost, rport) by local user
+	// 2. client sends [CSOTunReq:rport] to server
+	// client=> [CSOTunReq:rport] =>remhost
+	//    t := TunEndpoint{dataPort: lport, peer: remhost}
+	//
+	// remhost allocates dynamic (Tport)
+	//    t := TunEndpoint{dataPort: rport, peer: client, tunPort: Tport}
+	//
+	// remhost spawns goroutine forwarding data between (Tport,rport)
+	// client<= [CSOTunAck:Tport] <=remhost
+	//    t.tunPort = Tport
+	//
+	// client spawns goroutine forwarding data between (lport,Tport)
+	// --
+
+	// TunEndpoint [securePort:peer:dataPort]
+	TunEndpoint struct {
+		tunPort  uint16
+		peer     net.Addr
+		dataPort uint16
+	}
 
 	// Conn is a connection wrapping net.Conn with KEX & session state
 	Conn struct {
@@ -791,6 +813,10 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 					hc.SetStatus(CSETruncCSO)
 				}
 				hc.Close()
+			} else if ctrlStatOp == CSOTunReq {
+				Log.Notice("[Client Tunnel Open Request - TODO]\n")
+			} else if ctrlStatOp == CSOTunAck {
+				Log.Notice("[Server Tunnel Open Ack - TODO]\n")
 			} else {
 				hc.dBuf.Write(payloadBytes)
 				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
