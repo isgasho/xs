@@ -18,7 +18,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"log/syslog"
 	"os"
 	"os/exec"
 	"os/user"
@@ -27,13 +26,14 @@ import (
 	"syscall"
 
 	"blitter.com/go/goutmp"
+	"blitter.com/go/hkexsh/logger"
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
 	"github.com/kr/pty"
 )
 
 var (
-	Log *syslog.Writer // reg. syslog output (no -d)
+	Log *logger.Writer // reg. syslog output (no -d)
 )
 
 /* -------------------------------------------------------------- */
@@ -387,8 +387,8 @@ func main() {
 		}
 	}
 
-	Log, _ = syslog.New(syslog.LOG_DAEMON|syslog.LOG_DEBUG, "hkexshd")
-	hkexnet.Init(dbg, "hkexshd", syslog.LOG_DAEMON|syslog.LOG_DEBUG)
+	Log, _ = logger.New(logger.LOG_DAEMON|logger.LOG_DEBUG, "hkexshd")
+	hkexnet.Init(dbg, "hkexshd", logger.LOG_DAEMON|logger.LOG_DEBUG)
 	if dbg {
 		log.SetOutput(Log)
 	} else {
@@ -506,7 +506,7 @@ func main() {
 				if valid {
 					hc.Write([]byte{1})
 				} else {
-					Log.Notice(fmt.Sprintln("Invalid user", string(rec.Who())))
+					logger.LogNotice(fmt.Sprintln("Invalid user", string(rec.Who())))
 					hc.Write([]byte{0}) // ? required?
 					return
 				}
@@ -517,7 +517,7 @@ func main() {
 					// Generate automated login token
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					Log.Notice(fmt.Sprintf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname))
 					token := GenAuthToken(string(rec.Who()), string(rec.ConnHost()))
 					tokenCmd := fmt.Sprintf("echo \"%s\" | tee -a ~/.hkexsh_id", token)
 					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), tokenCmd, false, hc, chaffEnabled)
@@ -525,7 +525,7 @@ func main() {
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						Log.Err(fmt.Sprintf("[Error generating autologin token for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error generating autologin token for %s@%s]\n", rec.Who(), hname))
 					} else {
 						log.Printf("[Autologin token generation completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 						hc.SetStatus(hkexnet.CSOType(cmdStatus))
@@ -534,22 +534,22 @@ func main() {
 					// Non-interactive command
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					Log.Notice(fmt.Sprintf("[Running command for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Running command for [%s@%s]]\n", rec.Who(), hname))
 					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						Log.Err(fmt.Sprintf("[Error spawning cmd for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error spawning cmd for %s@%s]\n", rec.Who(), hname))
 					} else {
-						Log.Notice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
 						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 's' {
 					// Interactive session
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					Log.Notice(fmt.Sprintf("[Running shell for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Running shell for [%s@%s]]\n", rec.Who(), hname))
 
 					utmpx := goutmp.Put_utmp(string(rec.Who()), hname)
 					defer func() { goutmp.Unput_utmp(utmpx) }()
@@ -561,7 +561,7 @@ func main() {
 					if runErr != nil {
 						Log.Err(fmt.Sprintf("[Error spawning shell for %s@%s]\n", rec.Who(), hname))
 					} else {
-						Log.Notice(fmt.Sprintf("[Shell completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Shell completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
 						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 'D' {
@@ -569,15 +569,15 @@ func main() {
 					log.Printf("[Client->Server copy]\n")
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					Log.Notice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname))
 					runErr, cmdStatus := runClientToServerCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						Log.Err(fmt.Sprintf("[Error running cp for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error running cp for %s@%s]\n", rec.Who(), hname))
 					} else {
-						Log.Notice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
 					}
 					hc.SetStatus(hkexnet.CSOType(cmdStatus))
 
@@ -591,26 +591,26 @@ func main() {
 					log.Printf("[Server->Client copy]\n")
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					Log.Notice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname))
 					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						Log.Err(fmt.Sprintf("[Error spawning cp for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error spawning cp for %s@%s]\n", rec.Who(), hname))
 					} else {
-						Log.Notice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
 					}
 					hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					//fmt.Println("Waiting for EOF from other end.")
 					//_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
 				} else {
-					Log.Err(fmt.Sprintln("[Bad hkexsh.Session]"))
+					logger.LogErr(fmt.Sprintln("[Bad hkexsh.Session]"))
 				}
 				return
 			}(&conn)
 		} // Accept() success
 	} //endfor
-	Log.Notice(fmt.Sprintln("[Exiting]"))
+	logger.LogNotice(fmt.Sprintln("[Exiting]"))
 }
