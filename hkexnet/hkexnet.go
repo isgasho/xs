@@ -92,9 +92,9 @@ type (
 
 	// TunEndpoint [securePort:peer:dataPort]
 	TunEndpoint struct {
-		tunPort  uint16
-		peer     net.Addr
-		dataPort uint16
+		TunPort  uint16
+		Peer     string //net.Addr
+		DataPort uint16
 	}
 
 	// Conn is a connection wrapping net.Conn with KEX & session state
@@ -110,6 +110,8 @@ type (
 
 		chaff ChaffConfig
 
+		tuns []TunEndpoint
+
 		closeStat *CSOType      // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
 		rm        hash.Hash
@@ -122,6 +124,11 @@ type (
 var (
 	Log *logger.Writer // reg. syslog output (no -d)
 )
+
+// Return string (suitable as map key) for a tunnel endpoint
+func (t *TunEndpoint) String() string {
+	return fmt.Sprintf("[%d:%s:%d]", t.DataPort, t.Peer, t.TunPort)
+}
 
 func _initLogging(d bool, c string, f logger.Priority) {
 	if Log == nil {
@@ -814,7 +821,14 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				}
 				hc.Close()
 			} else if ctrlStatOp == CSOTunReq {
-				Log.Notice("[Client Tunnel Open Request - TODO]\n")
+				// This should ONLY be sent from client -> server!
+				// TODO: Hmm. should this package (hkexnet) take a 'server'/'client' context
+				// in order to know how to handle mis-uses?
+				addrs, _ := net.InterfaceAddrs()
+				t := TunEndpoint{Peer: addrs[0].String()}
+				t.TunPort = binary.BigEndian.Uint16(payloadBytes)
+				//fmt.Sscanf(string(payloadBytes), "%d", &t.tunPort)
+				Log.Notice(fmt.Sprintf("[TODO: Client Tunnel Open Request - traffic for server %s, port %d]\n", t.Peer, t.TunPort))
 			} else if ctrlStatOp == CSOTunAck {
 				Log.Notice("[Server Tunnel Open Ack - TODO]\n")
 			} else {

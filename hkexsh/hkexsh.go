@@ -16,6 +16,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -28,8 +29,8 @@ import (
 
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
-	"blitter.com/go/hkexsh/spinsult"
 	"blitter.com/go/hkexsh/logger"
+	"blitter.com/go/hkexsh/spinsult"
 	isatty "github.com/mattn/go-isatty"
 )
 
@@ -336,6 +337,15 @@ func rejectUserMsg() string {
 	return "Begone, " + spinsult.GetSentence() + "\r\n"
 }
 
+func requestTunnel(c *hkexnet.Conn, dp uint16, p string /*net.Addr*/, tp uint16) (t hkexnet.TunEndpoint) {
+	t = hkexnet.TunEndpoint{DataPort: dp, Peer: p, TunPort: tp}
+	var bTmp bytes.Buffer
+	binary.Write(&bTmp, binary.BigEndian, t.DataPort)
+	c.WritePacket(bTmp.Bytes(), hkexnet.CSOTunReq)
+
+	return
+}
+
 // hkexsh - a client for secure shell and file copy operations.
 //
 // While conforming to the basic net.Conn interface HKex.Conn has extra
@@ -359,6 +369,7 @@ func main() {
 	var server string
 	var port uint
 	var cmdStr string
+	var tunSpecStr string // lport1:rport1[,lport2:rport2,...]
 
 	var copySrc []byte
 	var copyDst string
@@ -380,9 +391,9 @@ func main() {
 	flag.UintVar(&port, "p", 2000, "`port`")
 	//flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
-	flag.UintVar(&chaffFreqMin, "f", 100, "chaff pkt `freq` min (msecs)")
-	flag.UintVar(&chaffFreqMax, "F", 5000, "chaff pkt `freq` max (msecs)")
-	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt `size` max (bytes)")
+	flag.UintVar(&chaffFreqMin, "f", 100, "`msecs-min` chaff pkt freq min (msecs)")
+	flag.UintVar(&chaffFreqMax, "F", 5000, "`msecs-max` chaff pkt freq max (msecs)")
+	flag.UintVar(&chaffBytesMax, "B", 64, "chaff pkt size max (bytes)")
 
 	// Find out what program we are (shell or copier)
 	myPath := strings.Split(os.Args[0], string(os.PathSeparator))
@@ -390,6 +401,7 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
+		flag.StringVar(&tunSpecStr, "t", "", "`tunnelspec` localPort:remotePort[,localPort:remotePort,...]")
 		flag.BoolVar(&gopt, "g", false, "ask server to generate authtoken")
 		shellMode = true
 		flag.Usage = UsageShell
@@ -478,7 +490,7 @@ func main() {
 	} else {
 		log.SetOutput(ioutil.Discard)
 	}
-	
+
 	if !gopt {
 		// See if we can log in via an auth token
 		u, _ := user.Current()
@@ -613,12 +625,24 @@ func main() {
 		// Set up chaffing to server
 		conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 		if chaffEnabled {
-			conn.EnableChaff()
+			conn.EnableChaff() // goroutine, returns immediately
 			defer conn.DisableChaff()
 			defer conn.ShutdownChaff()
 		}
 
 		if shellMode {
+			// TODO: tunnel setup would be here or within doShellMode()
+
+			// TESTING - tunnel
+			remAddrs, _ := net.LookupHost(remoteHost)
+			t := requestTunnel(&conn, 6001, remAddrs[0], 7001)
+			_ = t
+			//t := hkexnet.TunEndpoint{DataPort: 6001, Peer: nil, TunPort: 7001}
+			//var bTmp bytes.Buffer
+			//binary.Write(&bTmp, binary.BigEndian, t.DataPort)
+			//conn.WritePacket(bTmp.Bytes(), hkexnet.CSOTunReq)
+			// END TESTING - tunnel
+
 			doShellMode(isInteractive, &conn, oldState, rec)
 		} else { // copyMode
 			_, s := doCopyMode(&conn, pathIsDest, fileArgs, rec)
