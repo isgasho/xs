@@ -798,12 +798,19 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
-				hc.tuns[rport] <- payloadBytes[4:]
+				if hc.tuns[rport] == nil {
+					fmt.Printf("[Invalid rport:%d]\n", rport)
+				} else {
+					hc.tuns[rport] <- payloadBytes[4:]
+				}
+				fmt.Printf("[Done stuffing hc.tuns[rport]\n")
 			} else if ctrlStatOp == CSOTunClose {
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				fmt.Printf("[Got CSOTunClose: [lport %d:rport %d]\n", lport, rport)
-				hc.tuns[rport] = nil
+				if hc.tuns[rport] != nil {
+					close(hc.tuns[rport])
+				}
 			} else {
 				hc.dBuf.Write(payloadBytes)
 				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
