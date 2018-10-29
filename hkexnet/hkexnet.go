@@ -73,30 +73,6 @@ type (
 		szMax    uint // max size in bytes
 	}
 
-	// Tunnels
-	// --
-	// 1. client is given (lport, remhost, rport) by local user
-	// 2. client sends [CSOTunReq:rport] to server
-	// client=> [CSOTunReq:rport] =>remhost
-	//    t := TunEndpoint{dataPort: lport, peer: remhost}
-	//
-	// remhost allocates dynamic (Tport)
-	//    t := TunEndpoint{dataPort: rport, peer: client, tunPort: Tport}
-	//
-	// remhost spawns goroutine forwarding data between (Tport,rport)
-	// client<= [CSOTunAck:Tport] <=remhost
-	//    t.tunPort = Tport
-	//
-	// client spawns goroutine forwarding data between (lport,Tport)
-	// --
-
-	// TunEndpoint [securePort:peer:dataPort]
-	TunEndpoint struct {
-		TunPort  uint16
-		Peer     string //net.Addr
-		DataPort uint16
-	}
-
 	// Conn is a connection wrapping net.Conn with KEX & session state
 	Conn struct {
 		kex        KEXAlg      // KEX/KEM propsal (client -> server)
@@ -109,8 +85,7 @@ type (
 		Cols       uint16
 
 		chaff ChaffConfig
-
-		tuns []TunEndpoint
+		tuns  map[uint16]chan []byte
 
 		closeStat *CSOType      // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
@@ -127,7 +102,7 @@ var (
 
 // Return string (suitable as map key) for a tunnel endpoint
 func (t *TunEndpoint) String() string {
-	return fmt.Sprintf("[%d:%s:%d]", t.DataPort, t.Peer, t.TunPort)
+	return fmt.Sprintf("[%d:%s:%d]", t.Lport, t.Peer, t.Rport)
 }
 
 func _initLogging(d bool, c string, f logger.Priority) {
@@ -261,12 +236,6 @@ func _new(kexAlg KEXAlg, conn *net.Conn) (hc *Conn, e error) {
 }
 
 func (hc *Conn) applyConnExtensions(extensions ...string) {
-	//fmt.Printf("CSENone:%d CSEBadAuth:%d CSETruncCSO:%d CSEStillOpen:%d CSEExecFail:%d CSEPtyExecFail:%d\n",
-	//	CSENone, CSEBadAuth, CSETruncCSO, CSEStillOpen, CSEExecFail, CSEPtyExecFail)
-
-	//fmt.Printf("CSONone:%d  CSOHmacInvalid:%d CSOTermSize:%d CSOExitStatus:%d CSOChaff:%d\n",
-	//	CSONone, CSOHmacInvalid, CSOTermSize, CSOExitStatus, CSOChaff)
-
 	for _, s := range extensions {
 		switch s {
 		case "C_AES_256":
@@ -821,16 +790,20 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				}
 				hc.Close()
 			} else if ctrlStatOp == CSOTunReq {
-				// This should ONLY be sent from client -> server!
-				// TODO: Hmm. should this package (hkexnet) take a 'server'/'client' context
-				// in order to know how to handle mis-uses?
-				addrs, _ := net.InterfaceAddrs()
-				t := TunEndpoint{Peer: addrs[0].String()}
-				t.TunPort = binary.BigEndian.Uint16(payloadBytes)
-				//fmt.Sscanf(string(payloadBytes), "%d", &t.tunPort)
-				Log.Notice(fmt.Sprintf("[TODO: Client Tunnel Open Request - traffic for server %s, port %d]\n", t.Peer, t.TunPort))
-			} else if ctrlStatOp == CSOTunAck {
-				Log.Notice("[Server Tunnel Open Ack - TODO]\n")
+				// Client wants a tunnel set up - args [lport:rport]
+				lport := binary.BigEndian.Uint16(payloadBytes)
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				startServerTunnel(&hc, lport, rport)
+			} else if ctrlStatOp == CSOTunData {
+				lport := binary.BigEndian.Uint16(payloadBytes)
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
+				hc.tuns[rport] <- payloadBytes[4:]
+			} else if ctrlStatOp == CSOTunClose {
+				lport := binary.BigEndian.Uint16(payloadBytes)
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				fmt.Printf("[Got CSOTunClose: [lport %d:rport %d]\n", lport, rport)
+				hc.tuns[rport] = nil
 			} else {
 				hc.dBuf.Write(payloadBytes)
 				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))

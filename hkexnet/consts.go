@@ -33,8 +33,8 @@ type KEXAlg uint8
 // Extended exit status codes - indicate comm/pty issues
 // rather than remote end normal UNIX exit codes
 const (
-	CSENone        = 1024 + iota
-	CSEBadAuth     // Failed login password
+	CSENone = 1024 + iota
+	//CSEBadAuth     // Failed login password
 	CSETruncCSO    // No CSOExitStatus in payload
 	CSEStillOpen   // Channel closed unexpectedly
 	CSEExecFail    // cmd.Start() (exec) failed
@@ -50,8 +50,11 @@ const (
 	CSONone        = iota // No error, normal packet
 	CSOHmacInvalid        // HMAC mismatch detected on remote end
 	CSOTermSize           // set term size (rows:cols)
-	CSOTunReq // client tunnel open request (dstport)
-	CSOTunAck // server tunnel open ack (tunport)
+	CSOTunReq             // client tunnel open request (dstport)
+	CSOTunAck             // server tunnel open ack (tunport)
+	CSOTunData            // packet contains [rport:data]
+	CSOTunClose           // request to close connection (tunnel stays open)
+	CSOTunRefused         // tunnel has died or could not be established to rport
 	CSOExitStatus         // Remote cmd exit status
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 )
