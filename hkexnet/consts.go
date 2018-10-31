@@ -45,18 +45,47 @@ const (
 // This indicate channel-related or internal errors
 type CSExtendedCode uint32
 
-// Channel Status Op bytes - to distinguish packet types
+// Channel Status/Op bytes - packet types
 const (
+	// Main connection/session control
 	CSONone        = iota // No error, normal packet
 	CSOHmacInvalid        // HMAC mismatch detected on remote end
 	CSOTermSize           // set term size (rows:cols)
-	CSOTunReq             // client tunnel open request (dstport)
-	CSOTunAck             // server tunnel open ack (tunport)
-	CSOTunData            // packet contains [rport:data]
-	CSOTunClose           // request to close connection (tunnel stays open)
-	CSOTunRefused         // tunnel has died or could not be established to rport
 	CSOExitStatus         // Remote cmd exit status
 	CSOChaff              // Dummy packet, do not pass beyond decryption
+
+	// Tunnel setup/control/status
+	CSOTunSetup    // client -> server tunnel setup request (dstport)
+	CSOTunInUse    // server -> client: tunnel rport is in use
+	CSOTunSetupAck // server -> client tunnel setup ack
+	CSOTunAccept   // client -> server: tunnel client got an Accept()
+	// (Do we need a CSOTunAcceptAck server->client?)
+	CSOTunRefused // server -> client: tunnel rport connection refused
+	CSOTunData    // packet contains tunnel data [rport:data]
+	CSOTunDisconn // server -> client: tunnel rport disconnected
+	CSOTunHangup  // client -> server: tunnel lport hung up
+)
+
+// TunEndpoint.tunCtl control values
+const (
+	TunCtl_AcceptedClient = 'a' // client side has accept()ed a conn
+	// [CSOTunAccept]
+	// status: client listen() worker accepted conn on lport
+	// action:server side should dial() rport on client's behalf
+
+	TunCtl_LostClient = 'h' // client side has hung up
+	// [CSOTunHangup]
+	// status: client side conn hung up from lport
+	// action:server side should hang up on rport, on client's behalf
+
+	TunCtl_ConnRefused = 'r' // server side couldn't complete tunnel
+	// [CSOTunRefused]
+	// status:server side could not dial() remote side
+
+	TunCtl_LostConn = 'l' // server side disconnected
+	// [CSOTunDisconn]
+	// status:server side lost connection to rport
+	// action:client should disconnect accepted lport connection
 )
 
 // Channel status Op byte type

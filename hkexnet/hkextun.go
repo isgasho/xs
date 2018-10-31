@@ -40,9 +40,10 @@ type (
 
 	// TunEndpoint [securePort:peer:dataPort]
 	TunEndpoint struct {
-		Rport uint16 // Names are from client's perspective
-		Lport uint16 // ... ie., RPort is on server, LPort is on client
-		Peer  string //net.Addr
+		Rport  uint16      // Names are from client's perspective
+		Lport  uint16      // ... ie., RPort is on server, LPort is on client
+		Peer   string      //net.Addr
+		tunCtl chan<- rune //See TunCtl_* consts
 	}
 
 	TunPacket struct {
@@ -117,8 +118,8 @@ func startServerTunnel(hc *Conn, lport, rport uint16) {
 		go func() {
 			defer func() {
 				//if hc.tuns[rport] != nil {
-					//close(hc.tuns[rport])
-					//hc.tuns[rport] = nil
+				//close(hc.tuns[rport])
+				//hc.tuns[rport] = nil
 				//}
 				c.Close()
 			}()
@@ -215,8 +216,8 @@ func StartClientTunnel(hc *Conn, lport, rport uint16) {
 								//fmt.Printf("[Got this through tunnel:%v]\n", bytes)
 								c.Write(bytes)
 							} else {
-								fmt.Printf("[Channel closed? exiting client worker!]\n")
-								break
+								fmt.Printf("[Channel closed?]\n")
+								//break
 							}
 						}
 					}()

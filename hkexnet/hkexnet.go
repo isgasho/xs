@@ -810,10 +810,12 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 					hc.SetStatus(CSETruncCSO)
 				}
 				hc.Close()
-			} else if ctrlStatOp == CSOTunReq {
+			} else if ctrlStatOp == CSOTunSetup {
 				// Client wants a tunnel set up - args [lport:rport]
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				// spawn workers to listen for data and tunnel events
+				// via channel comms to hc.tuns[rport].tunCtl
 				startServerTunnel(&hc, lport, rport)
 			} else if ctrlStatOp == CSOTunData {
 				lport := binary.BigEndian.Uint16(payloadBytes)
