@@ -685,10 +685,8 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 //
 // See go doc io.Reader
 func (hc Conn) Read(b []byte) (n int, err error) {
-	//log.Printf("[Decrypting...]\r\n")
 	for {
-		//log.Printf("hc.dBuf.Len(): %d\n", hc.dBuf.Len())
-		if hc.dBuf.Len() > 0 /* len(b) */ {
+		if hc.dBuf.Len() > 0 {
 			break
 		}
 
@@ -698,31 +696,52 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 
 		// Read ctrl/status opcode (CSOHmacInvalid on hmac mismatch)
 		err = binary.Read(*hc.c, binary.BigEndian, &ctrlStatOp)
+		if err != nil {
+			if err.Error() == "EOF" {
+				return 0, io.EOF
+			}
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				return 0, io.EOF
+			}
+			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "ctrlStatOp", err)
+			logger.LogErr(etxt)
+			return 0, errors.New(etxt)
+		}
 		log.Printf("[ctrlStatOp: %v]\n", ctrlStatOp)
 		if ctrlStatOp == CSOHmacInvalid {
 			// Other side indicated channel tampering, close channel
 			hc.Close()
-			return 1, errors.New("** ALERT - remote end detected HMAC mismatch - possible channel tampering **")
+			return 0, errors.New("** ALERT - remote end detected HMAC mismatch - possible channel tampering **")
 		}
 
 		// Read the hmac and payload len first
 		err = binary.Read(*hc.c, binary.BigEndian, &hmacIn)
-		// Normal client 'exit' from interactive session will cause
-		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
 		if err != nil {
-			if err == io.EOF || strings.HasSuffix(err.Error(), "use of closed network connection") {
-				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
-			} else {
-				log.Println(err)
+			if err.Error() == "EOF" {
+				return 0, io.EOF
 			}
-			return 0, err
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				return 0, io.EOF
+			}
+			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "HMAC", err)
+			logger.LogErr(etxt)
+			return 0, errors.New(etxt)
 		}
 
 		err = binary.Read(*hc.c, binary.BigEndian, &payloadLen)
 		if err != nil {
-			if err.Error() != "EOF" {
-				logger.LogErr(fmt.Sprintln("[2]unexpected Read() err:", err))
+			if err.Error() == "EOF" {
+				return 0, io.EOF
 			}
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				return 0, io.EOF
+			}
+			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "payloadLen", err)
+			logger.LogErr(etxt)
+			return 0, errors.New(etxt)
 		}
 
 		if payloadLen > MAX_PAYLOAD_LEN {
@@ -733,15 +752,17 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 
 		var payloadBytes = make([]byte, payloadLen)
 		n, err = io.ReadFull(*hc.c, payloadBytes)
-
-		// Normal client 'exit' from interactive session will cause
-		// (on server side) err.Error() == "<iface/addr info ...>: use of closed network connection"
-		if err != nil && err.Error() != "EOF" {
-			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				logger.LogErr(fmt.Sprintln("[3]unexpected Read() err:", err))
-			} else {
-				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+		if err != nil {
+			if err.Error() == "EOF" {
+				return 0, io.EOF
 			}
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				return 0, io.EOF
+			}
+			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "payloadBytes", err)
+			logger.LogErr(etxt)
+			return 0, errors.New(etxt)
 		}
 
 		log.Printf("  <:ctext:\r\n%s\r\n", hex.Dump(payloadBytes[:n]))
@@ -797,19 +818,21 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 			} else if ctrlStatOp == CSOTunData {
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
+				_ = lport
+				//fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
 				if hc.tuns[rport] == nil {
-					fmt.Printf("[Invalid rport:%d]\n", rport)
+					fmt.Printf("[Invalid rport:%d]\r\n", rport)
 				} else {
 					hc.tuns[rport] <- payloadBytes[4:]
 				}
-				fmt.Printf("[Done stuffing hc.tuns[rport]\n")
+				//fmt.Printf("[Done stuffing hc.tuns[rport]\n")
 			} else if ctrlStatOp == CSOTunClose {
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				fmt.Printf("[Got CSOTunClose: [lport %d:rport %d]\n", lport, rport)
+				fmt.Printf("[Got CSOTunClose: [lport %d:rport %d]\r\n", lport, rport)
 				if hc.tuns[rport] != nil {
 					close(hc.tuns[rport])
+					hc.tuns[rport] = nil
 				}
 			} else {
 				hc.dBuf.Write(payloadBytes)

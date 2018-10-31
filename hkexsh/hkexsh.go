@@ -352,7 +352,7 @@ func requestTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16
 	errL := binary.Read(hc, binary.BigEndian, &lportReply)
 	errR := binary.Read(hc, binary.BigEndian, &rportReply)
 	if errL == nil && errR == nil {
-		fmt.Printf("Server established tunnel [%d:%d]\n", lportReply, rportReply)
+		fmt.Printf("Server established tunnel [%d:%d]\r\n", lportReply, rportReply)
 		hkexnet.StartClientTunnel(hc, lp, rp)
 	} else {
 		fmt.Println("FAILED reading remPort")
