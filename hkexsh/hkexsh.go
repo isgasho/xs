@@ -340,24 +340,18 @@ func rejectUserMsg() string {
 // Transmit request to server for it to set up the remote end of a tunnel
 //
 // Server responds with [CSOTunAck:rport] or [CSOTunRefused:rport]
-func requestTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) (t hkexnet.TunEndpoint) {
+// (handled in hkexnet.Read())
+func reqTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) {
+	// Write request to server so it can attempt to set up its end
 	var bTmp bytes.Buffer
 	binary.Write(&bTmp, binary.BigEndian, lp)
 	binary.Write(&bTmp, binary.BigEndian, rp)
-	hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunReq)
+	hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunSetup)
+	// hkexnet.WritePacket() handles processing of client side tun setup,
+	// calling hkexnet.StartClientTunnel()
 
-	// Server should reply immediately with success (lport:rport) or
-	// refusal (lport:0)
-	var lportReply, rportReply uint16
-	errL := binary.Read(hc, binary.BigEndian, &lportReply)
-	errR := binary.Read(hc, binary.BigEndian, &rportReply)
-	if errL == nil && errR == nil {
-		fmt.Printf("Server established tunnel [%d:%d]\r\n", lportReply, rportReply)
-		hkexnet.StartClientTunnel(hc, lp, rp)
-	} else {
-		fmt.Println("FAILED reading remPort")
-	}
-	t = hkexnet.TunEndpoint{Lport: lportReply, Peer: p, Rport: rportReply}
+	// Server should reply immediately with CSOTunSetupAck[lport:rport]
+	// hkexnet.Read() on server side handles server side tun setup.
 	return
 }
 
@@ -648,12 +642,7 @@ func main() {
 		if shellMode {
 			// TESTING - tunnel
 			remAddrs, _ := net.LookupHost(remoteHost)
-			t := requestTunnel(&conn, 6001, remAddrs[0], 7001)
-			_ = t
-			//t := hkexnet.TunEndpoint{DataPort: 6001, Peer: nil, TunPort: 7001}
-			//var bTmp bytes.Buffer
-			//binary.Write(&bTmp, binary.BigEndian, t.DataPort)
-			//conn.WritePacket(bTmp.Bytes(), hkexnet.CSOTunReq)
+			reqTunnel(&conn, 6001, remAddrs[0], 7001)
 			// END TESTING - tunnel
 
 			doShellMode(isInteractive, &conn, oldState, rec)

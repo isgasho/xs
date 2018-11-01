@@ -85,7 +85,7 @@ type (
 		Cols       uint16
 
 		chaff ChaffConfig
-		tuns  map[uint16]chan []byte
+		tuns  map[uint16]*TunEndpoint
 
 		closeStat *CSOType      // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
@@ -811,12 +811,16 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				}
 				hc.Close()
 			} else if ctrlStatOp == CSOTunSetup {
-				// Client wants a tunnel set up - args [lport:rport]
+				// server side tunnel setup in response to client
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				// spawn workers to listen for data and tunnel events
-				// via channel comms to hc.tuns[rport].tunCtl
-				startServerTunnel(&hc, lport, rport)
+				log.Printf("Tunnel setup [%d:%d]\r\n", lport, rport)
+				StartServerTunnel(&hc, lport, rport)
+			} else if ctrlStatOp == CSOTunSetupAck {
+				// client side has received ack from server
+				lport := binary.BigEndian.Uint16(payloadBytes)
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				log.Printf("Tunnel ack [%d:%d]\r\n", lport, rport)
 			} else if ctrlStatOp == CSOTunData {
 				lport := binary.BigEndian.Uint16(payloadBytes)
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
@@ -825,16 +829,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				if hc.tuns[rport] == nil {
 					fmt.Printf("[Invalid rport:%d]\r\n", rport)
 				} else {
-					hc.tuns[rport] <- payloadBytes[4:]
-				}
-				//fmt.Printf("[Done stuffing hc.tuns[rport]\n")
-			} else if ctrlStatOp == CSOTunClose {
-				lport := binary.BigEndian.Uint16(payloadBytes)
-				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				fmt.Printf("[Got CSOTunClose: [lport %d:rport %d]\r\n", lport, rport)
-				if hc.tuns[rport] != nil {
-					close(hc.tuns[rport])
-					hc.tuns[rport] = nil
+					hc.tuns[rport].Data <- payloadBytes[4:]
 				}
 			} else {
 				hc.dBuf.Write(payloadBytes)
@@ -876,8 +871,8 @@ func (hc Conn) Write(b []byte) (n int, err error) {
 	return n, err
 }
 
-// Write a byte slice with specified ctrlStatusOp byte
-func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
+// Write a byte slice with specified ctrlStatOp byte
+func (hc *Conn) WritePacket(b []byte, ctrlStatOp byte) (n int, err error) {
 	//log.Printf("[Encrypting...]\r\n")
 	var hmacOut []uint8
 	var payloadLen uint32
@@ -886,7 +881,26 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 		return 0, errors.New("Secure chan not ready for writing")
 	}
 
-	//Padding
+	if ctrlStatOp == CSOTunSetup {
+		// Client-side tunnel setup
+		lport := binary.BigEndian.Uint16(b)
+		rport := binary.BigEndian.Uint16(b[2:4])
+		// spawn workers to listen for data and tunnel events
+		// via channel comms to hc.tuns[rport].tunCtl
+		StartClientTunnel(hc, lport, rport)
+		// CSOTunSetup is written through to server side,
+		// see hc.Read()
+	} else if ctrlStatOp == CSOTunSetupAck {
+		lport := binary.BigEndian.Uint16(b)
+		rport := binary.BigEndian.Uint16(b[2:4])
+		if lport == 0 || rport == 0 {
+			log.Printf("Responded with tunnel setup nak [%d:%d]\r\n", lport, rport)
+		} else {
+			log.Printf("Responded with tunnel setup ack [%d:%d]\r\n", lport, rport)
+		}
+	}
+
+	//Padding prior to encryption
 	padSz := (rand.Intn(PAD_SZ) / 2) + (PAD_SZ / 2)
 	padLen := padSz - ((len(b) + padSz) % padSz)
 	if padLen == padSz {
@@ -938,7 +952,6 @@ func (hc *Conn) WritePacket(b []byte, op byte) (n int, err error) {
 	}
 	log.Printf("  ->ctext:\r\n%s\r\n", hex.Dump(wb.Bytes()))
 
-	ctrlStatOp := op
 	err = binary.Write(*hc.c, binary.BigEndian, &ctrlStatOp)
 	if err == nil {
 		// Write hmac LSB, payloadLen followed by payload
