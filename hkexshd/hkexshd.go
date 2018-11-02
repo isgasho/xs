@@ -387,8 +387,8 @@ func main() {
 		}
 	}
 
-	Log, _ = logger.New(logger.LOG_DAEMON|logger.LOG_DEBUG, "hkexshd")
-	hkexnet.Init(dbg, "hkexshd", logger.LOG_DAEMON|logger.LOG_DEBUG)
+	Log, _ = logger.New(logger.LOG_DAEMON|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR, "hkexshd")
+	hkexnet.Init(dbg, "hkexshd", logger.LOG_DAEMON|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR)
 	if dbg {
 		log.SetOutput(Log)
 	} else {

@@ -346,12 +346,47 @@ func reqTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) {
 	var bTmp bytes.Buffer
 	binary.Write(&bTmp, binary.BigEndian, lp)
 	binary.Write(&bTmp, binary.BigEndian, rp)
+	fmt.Printf("bTmp:%x\n", bTmp.Bytes())
+	logger.LogDebug(fmt.Sprintln("[Client sending CSOTunSetup]"))
 	hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunSetup)
 	// hkexnet.WritePacket() handles processing of client side tun setup,
 	// calling hkexnet.StartClientTunnel()
 
 	// Server should reply immediately with CSOTunSetupAck[lport:rport]
 	// hkexnet.Read() on server side handles server side tun setup.
+
+	// CSOTun packets don't reply with acks/naks in the datastream; they
+	// record the last status (other than CSOTunData) in the TunEndpoint
+	// .Status field. We can check this here to determine how the request
+	// completed.
+	// TODO: Should be a timeout check here of course to avoid hangs...
+	hc.InitTunEndpoint(lp, p, rp)
+	resp := make([]byte, 4)
+	var lpResp, rpResp uint16
+	n, e := io.ReadFull(hc, resp)
+	if n < 4 || e != nil {
+		logger.LogErr(fmt.Sprintf("[Client tun response len %d, %s\n", n, e))
+	} else {
+		lpResp = binary.BigEndian.Uint16(resp[0:2])
+		rpResp = binary.BigEndian.Uint16(resp[2:4])
+		//var s byte
+		//for timeout := 0; timeout < 5; timeout++ {
+		//	s = hc.GetTunStatus(rp)
+		//	if s != hkexnet.CSOTunSetup {
+		//		logger.LogDebug(fmt.Sprintf("[Client tun setup result:%d\n]", s))
+		//		break
+		//	}
+		//	time.Sleep(1 * time.Second)
+		//}
+	}
+
+	if lpResp == lp && rpResp == rp {
+		logger.LogDebug("[Client got tun setup ack OK]")
+		hc.StartClientTunnel(lp, rp)
+	} else {
+		logger.LogDebug(fmt.Sprintf("[Client tun response ports [%d:%d]\n", lpResp, rpResp))
+		logger.LogDebug(fmt.Sprintln("[Client tun setup FAILED]"))
+	}
 	return
 }
 
@@ -492,8 +527,8 @@ func main() {
 	// either the shell session or copy operation.
 	_ = shellMode
 
-	Log, _ = logger.New(logger.LOG_USER|logger.LOG_DEBUG, "hkexsh")
-	hkexnet.Init(dbg, "hkexsh", logger.LOG_USER|logger.LOG_DEBUG)
+	Log, _ = logger.New(logger.LOG_USER|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR, "hkexsh")
+	hkexnet.Init(dbg, "hkexsh", logger.LOG_USER|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR)
 	if dbg {
 		log.SetOutput(Log)
 	} else {

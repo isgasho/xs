@@ -11,11 +11,11 @@ package hkexnet
 import (
 	"bytes"
 	"encoding/binary"
-	//"fmt"
-	//"io"
-	//"log"
+	"fmt"
+	"io"
 	"net"
-	//"blitter.com/go/hkexsh/logger"
+
+	"blitter.com/go/hkexsh/logger"
 )
 
 type (
@@ -39,203 +39,205 @@ type (
 
 	// TunEndpoint [securePort:peer:dataPort]
 	TunEndpoint struct {
-		Rport uint16      // Names are from client's perspective
-		Lport uint16      // ... ie., RPort is on server, LPort is on client
-		Peer  string      //net.Addr
-		Ctl   chan<- rune //See TunCtl_* consts
-		Data  chan []byte
+		Rport  uint16      // Names are from client's perspective
+		Lport  uint16      // ... ie., RPort is on server, LPort is on client
+		Peer   string      //net.Addr
+		//Status byte        //Last status of tunnel (eg., CSOTunSetupAck)
+		Ctl    chan<- rune //See TunCtl_* consts
+		Data   chan []byte
 	}
 
-	TunPacket struct {
-		n    uint32
-		data []byte
-	}
+	//TunPacket struct {
+	//	n    uint32
+	//	data []byte
+	//}
 )
 
-func StartClientTunnel(hc *Conn, lport, rport uint16) {
+func (hc *Conn) InitTunEndpoint(lp uint16, p string /* net.Addr */, rp uint16) {
 	if hc.tuns == nil {
 		hc.tuns = make(map[uint16]*TunEndpoint)
 	}
-	if hc.tuns[rport] == nil {
-		addrs, _ := net.InterfaceAddrs()
-		hc.tuns[rport] = &TunEndpoint{Peer: addrs[0].String(),
-			Lport: lport, Rport: rport, Ctl: make(chan<- rune)}
+	if hc.tuns[rp] == nil {
+		var addrs []net.Addr
+		if p == "" {
+			addrs, _ = net.InterfaceAddrs()
+			p = addrs[0].String()
+		}
+		hc.tuns[rp] = &TunEndpoint{/*Status: CSOTunSetup,*/ Peer: p,
+				Lport: lp, Rport: rp, Data: make(chan[]byte, 32), Ctl: make(chan<- rune)}
+		logger.LogDebug(fmt.Sprintf("InitTunEndpoint [%d:%s:%d]\n", lp, p, rp))
 	}
+	return
+}
 
-	/*
-			 go func() {
+//func (hc *Conn) GetTunStatus(rp uint16) byte {
+//	return hc.tuns[rp].Status
+//}
 
-			l, e := net.Listen("tcp", fmt.Sprintf(":%d", lport))
-			if e != nil {
-				fmt.Printf("[Could not get lport %d! (%s)\n", lport, e)
-			} else {
-				defer l.Close()
-				for {
-					c, e := l.Accept()
+func (hc *Conn) StartClientTunnel(lport, rport uint16) {
+	hc.InitTunEndpoint(lport, "", rport)
+	t := hc.tuns[rport] // for convenience
 
-					defer func() {
-						//if hc.tuns[rport] != nil {
-						//	close(hc.tuns[rport])
-						//	hc.tuns[rport] = nil
-						//}
-						c.Close()
+	go func() {
+
+		logger.LogDebug(fmt.Sprintf("Listening for client tunnel port %d", lport))
+		l, e := net.Listen("tcp", fmt.Sprintf(":%d", lport))
+		if e != nil {
+			logger.LogDebug(fmt.Sprintf("[Could not get lport %d! (%s)", lport, e))
+		} else {
+			defer l.Close()
+			for {
+				c, e := l.Accept()
+
+				defer func() {
+					//if hc.tuns[rport] != nil {
+					//	close(hc.tuns[rport])
+					//	hc.tuns[rport] = nil
+					//}
+					c.Close()
+				}()
+
+				if e != nil {
+					logger.LogDebug(fmt.Sprintf("Accept() got error(%v), hanging up.", e))
+					break
+					//log.Fatal(err)
+				} else {
+					logger.LogDebug(fmt.Sprintln("Accepted tunnel client"))
+
+					// outside client -> tunnel lport
+					go func() {
+						var tunDst bytes.Buffer
+						binary.Write(&tunDst, binary.BigEndian, lport)
+						binary.Write(&tunDst, binary.BigEndian, rport)
+						for {
+							rBuf := make([]byte, 1024)
+							//Read data from c, encrypt/write via hc to client(lport)
+							n, e := c.Read(rBuf)
+							if e != nil {
+								if e == io.EOF {
+									logger.LogDebug(fmt.Sprintf("lport Disconnected: shutting down tunnel [%d:%d]", lport, rport))
+								} else {
+									logger.LogDebug(fmt.Sprintf("Read error from lport of tun [%d:%d]\n%s", lport, rport, e))
+								}
+								hc.WritePacket(tunDst.Bytes(), CSOTunHangup)
+								break
+							}
+							if n > 0 {
+								rBuf = append(tunDst.Bytes(), rBuf[:n]...)
+								//logger.LogDebug(fmt.Sprintf("Got lport data:%v", tunDst.Bytes()))
+								hc.WritePacket(rBuf[:n+4], CSOTunData)
+							}
+						}
 					}()
 
-					if e != nil {
-						log.Printf("Accept() got error(%v), hanging up.\n", e)
-						break
-						//log.Fatal(err)
+					// tunnel lport -> outside client (c)
+					go func() {
+						defer func() {
+							//if hc.tuns[rport] != nil {
+							//	close(hc.tuns[rport])
+							//	hc.tuns[rport] = nil
+							//}
+							c.Close()
+						}()
+
+						for {
+							//fmt.Printf("Reading from client hc.tuns[%d]\n", lport)
+							bytes, ok := <-t.Data
+							if ok {
+								//fmt.Printf("[Got this through tunnel:%v]\n", bytes)
+								c.Write(bytes)
+							} else {
+								logger.LogDebug(fmt.Sprintf("[Channel closed?]\n"))
+								//break
+							}
+						}
+					}()
+
+				}
+			}
+		}
+	}()
+}
+
+func (hc *Conn) StartServerTunnel(lport, rport uint16) {
+	hc.InitTunEndpoint(lport, "", rport)
+	t := hc.tuns[rport] // for convenience
+
+	logger.LogDebug("Server dialling...")
+	c, err := net.Dial("tcp", fmt.Sprintf(":%d", rport))
+	if err != nil {
+		logger.LogDebug(fmt.Sprintf("Nothing is serving at rport :%d!", rport))
+		var resp bytes.Buffer
+		binary.Write(&resp, binary.BigEndian, lport)
+		binary.Write(&resp, binary.BigEndian, rport)
+		hc.WritePacket(resp.Bytes(), CSOTunRefused)
+	} else {
+		logger.LogDebug(fmt.Sprintf("[Tunnel Opened - %d:%s:%d]", lport, t.Peer, rport))
+		var resp bytes.Buffer
+		binary.Write(&resp, binary.BigEndian, lport)
+		binary.Write(&resp, binary.BigEndian, rport)
+		logger.LogDebug(fmt.Sprintf("[Writing CSOTunSetupAck[%d:%d]", lport, rport))
+		hc.WritePacket(resp.Bytes(), CSOTunSetupAck)
+
+		//
+		// worker to read data from the rport (to encrypt & send to client)
+		//
+		go func() {
+			defer func() {
+				//if hc.tuns[rport] != nil {
+				//	close(hc.tuns[rport])
+				//	hc.tuns[rport] = nil
+				//}
+				c.Close()
+			}()
+
+			var tunDst bytes.Buffer
+			binary.Write(&tunDst, binary.BigEndian, t.Lport)
+			binary.Write(&tunDst, binary.BigEndian, t.Rport)
+			for {
+				rBuf := make([]byte, 1024)
+				// Read data from c, encrypt/write via hc to client(lport)
+				n, e := c.Read(rBuf)
+				if e != nil {
+					if e == io.EOF {
+						logger.LogDebug(fmt.Sprintf("rport Disconnected: shutting down tunnel %v\n", t))
 					} else {
-						log.Println("Accepted client")
-
-						// outside client -> tunnel lport
-						go func() {
-							var tunDst bytes.Buffer
-							binary.Write(&tunDst, binary.BigEndian, lport)
-							binary.Write(&tunDst, binary.BigEndian, rport)
-							for {
-								rBuf := make([]byte, 1024)
-								//Read data from c, encrypt/write via hc to client(lport)
-								n, e := c.Read(rBuf)
-								if e != nil {
-									if e == io.EOF {
-										logger.LogNotice(fmt.Sprintf("lport Disconnected: shutting down tunnel [%d:%d]\n", lport, rport))
-									} else {
-										logger.LogErr(fmt.Sprintf("Read error from lport of tun [%d:%d]\n%s", lport, rport, e))
-									}
-									hc.WritePacket(tunDst.Bytes(), CSOTunClose)
-									break
-								}
-								if n > 0 {
-									rBuf = append(tunDst.Bytes(), rBuf[:n]...)
-									logger.LogNotice(fmt.Sprintf("Got lport data:%v\n", tunDst.Bytes()))
-									hc.WritePacket(rBuf[:n+4], CSOTunData)
-								}
-							}
-						}()
-
-						// tunnel lport -> outside client (c)
-						go func() {
-							defer func() {
-								//if hc.tuns[rport] != nil {
-								//	close(hc.tuns[rport])
-								//	hc.tuns[rport] = nil
-								//}
-								c.Close()
-							}()
-
-							for {
-								//fmt.Printf("Reading from client hc.tuns[%d]\n", lport)
-								bytes, ok := <-hc.tuns[rport]
-								if ok {
-									//fmt.Printf("[Got this through tunnel:%v]\n", bytes)
-									c.Write(bytes)
-								} else {
-									fmt.Printf("[Channel closed?]\n")
-									//break
-								}
-							}
-						}()
-
+						logger.LogDebug(fmt.Sprintf("Read error from rport of tun %v\n%s", t, e))
 					}
+					var resp bytes.Buffer
+					binary.Write(&resp, binary.BigEndian, lport)
+					binary.Write(&resp, binary.BigEndian, rport)
+					hc.WritePacket(resp.Bytes(), CSOTunDisconn)
+					logger.LogDebug(fmt.Sprintf("Closing server rport %d net.Dial()", t.Rport))
+					break
+				}
+				if n > 0 {
+					rBuf = append(tunDst.Bytes(), rBuf[:n]...)
+					hc.WritePacket(rBuf[:n+4], CSOTunData)
 				}
 			}
 		}()
-	*/
-}
 
-func StartServerTunnel(hc *Conn, lport, rport uint16) {
-	if hc.tuns == nil {
-		hc.tuns = make(map[uint16]*TunEndpoint)
+		// worker to read data from client (already decrypted) & fwd to rport
+		go func() {
+			defer func() {
+				//if hc.tuns[rport] != nil {
+				//close(hc.tuns[rport])
+				//hc.tuns[rport] = nil
+				//}
+				c.Close()
+			}()
+
+			for {
+				rData, ok := <-t.Data
+				if ok {
+					//logger.LogDebug(fmt.Sprintf("Got client data:%v", rData))
+					c.Write(rData)
+				} else {
+					logger.LogDebug("!!! ERROR reading from hc.tuns[] channel !!!")
+					break
+				}
+			}
+		}()
 	}
-	if hc.tuns[rport] == nil {
-		addrs, _ := net.InterfaceAddrs()
-		hc.tuns[rport] = &TunEndpoint{Peer: addrs[0].String(),
-			Lport: lport, Rport: rport, Ctl: make(chan<- rune)}
-	}
-
-	// Inform client of the tunPort
-	var resp bytes.Buffer
-	binary.Write(&resp, binary.BigEndian, hc.tuns[rport].Lport)
-	binary.Write(&resp, binary.BigEndian, hc.tuns[rport].Rport)
-	hc.WritePacket(resp.Bytes(), CSOTunSetupAck)
-
-	/*
-			t := TunEndpoint{Peer: addrs[0].String(), Lport: lport, Rport: rport}
-			var resp bytes.Buffer
-			binary.Write(&resp, binary.BigEndian, t.Lport)
-
-			//var dialHangup chan<- bool
-
-			c, err := net.Dial("tcp", fmt.Sprintf(":%d", rport))
-			if err != nil {
-				logger.LogErr(fmt.Sprintf("Nothing is serving at rport :%d!", rport))
-				binary.Write(&resp, binary.BigEndian, uint16(0))
-				// Inform client of the tunPort
-				hc.WritePacket(resp.Bytes(), CSOTunRefused)
-			} else {
-				binary.Write(&resp, binary.BigEndian, t.Rport)
-				logger.LogNotice(fmt.Sprintf("[Tunnel Opened - %d:%s:%d]", t.Lport, t.Peer, t.Rport))
-
-				//
-				// worker to read data from the rport (to encrypt & send to client)
-				//
-				go func() {
-					defer func() {
-						//if hc.tuns[rport] != nil {
-						//	close(hc.tuns[rport])
-						//	hc.tuns[rport] = nil
-						//}
-						c.Close()
-					}()
-
-					var tunDst bytes.Buffer
-					binary.Write(&tunDst, binary.BigEndian, t.Lport)
-					binary.Write(&tunDst, binary.BigEndian, t.Rport)
-					for {
-						rBuf := make([]byte, 1024)
-						// Read data from c, encrypt/write via hc to client(lport)
-						n, e := c.Read(rBuf)
-						if e != nil {
-							if e == io.EOF {
-								logger.LogNotice(fmt.Sprintf("rport Disconnected: shutting down tunnel %v\n", t))
-							} else {
-								logger.LogErr(fmt.Sprintf("Read error from rport of tun %v\n%s", t, e))
-							}
-							hc.WritePacket(resp.Bytes(), CSOTunClose)
-							fmt.Printf("Closing server rport net.Dial()\n")
-							break
-						}
-						if n > 0 {
-							rBuf = append(tunDst.Bytes(), rBuf[:n]...)
-							logger.LogNotice(fmt.Sprintf("Got rport data:%v", tunDst.Bytes()))
-							hc.WritePacket(rBuf[:n+4], CSOTunData)
-						}
-					}
-				}()
-
-				// worker to read data from client (already decrypted) & fwd to rport
-				go func() {
-					defer func() {
-						//if hc.tuns[rport] != nil {
-						//close(hc.tuns[rport])
-						//hc.tuns[rport] = nil
-						//}
-						c.Close()
-					}()
-
-					for {
-						rData, ok := <-hc.tuns[rport]
-						if ok {
-							logger.LogNotice(fmt.Sprintf("Got client data:%v", rData))
-							c.Write(rData)
-						} else {
-							logger.LogErr("!!! ERROR reading from hc.tuns[] channel !!!")
-							break
-						}
-					}
-				}()
-
-		}
-	*/
 }

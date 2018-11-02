@@ -532,7 +532,7 @@ func (hc *Conn) Close() (err error) {
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
 	hc.WritePacket(s, CSOExitStatus)
 	err = (*hc.c).Close()
-	logger.LogNotice(fmt.Sprintln("[Conn Closing]"))
+	logger.LogDebug(fmt.Sprintln("[Conn Closing]"))
 	return
 }
 
@@ -602,7 +602,7 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 	if err != nil {
 		return HKExListener{nil}, err
 	}
-	logger.LogNotice(fmt.Sprintf("[Listening on %s]\n", ipport))
+	logger.LogDebug(fmt.Sprintf("[Listening on %s]\n", ipport))
 	hl.l = l
 	return
 }
@@ -612,7 +612,7 @@ func Listen(protocol string, ipport string) (hl HKExListener, e error) {
 //
 // See go doc net.Listener.Close
 func (hl HKExListener) Close() error {
-	logger.LogNotice(fmt.Sprintln("[Listener Closed]"))
+	logger.LogDebug(fmt.Sprintln("[Listener Closed]"))
 	return hl.l.Close()
 }
 
@@ -632,7 +632,7 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 	if err != nil {
 		return Conn{}, err
 	}
-	logger.LogNotice(fmt.Sprintln("[net.Listener Accepted]"))
+	logger.LogDebug(fmt.Sprintln("[net.Listener Accepted]"))
 
 	// Read KEx alg proposed by client
 	var kexAlg KEXAlg
@@ -701,11 +701,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				return 0, io.EOF
 			}
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				logger.LogDebug(fmt.Sprintln("[Client hung up]"))
 				return 0, io.EOF
 			}
 			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "ctrlStatOp", err)
-			logger.LogErr(etxt)
+			logger.LogDebug(etxt)
 			return 0, errors.New(etxt)
 		}
 		log.Printf("[ctrlStatOp: %v]\n", ctrlStatOp)
@@ -722,11 +722,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				return 0, io.EOF
 			}
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				logger.LogDebug(fmt.Sprintln("[Client hung up]"))
 				return 0, io.EOF
 			}
 			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "HMAC", err)
-			logger.LogErr(etxt)
+			logger.LogDebug(etxt)
 			return 0, errors.New(etxt)
 		}
 
@@ -736,16 +736,16 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				return 0, io.EOF
 			}
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				logger.LogDebug(fmt.Sprintln("[Client hung up]"))
 				return 0, io.EOF
 			}
 			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "payloadLen", err)
-			logger.LogErr(etxt)
+			logger.LogDebug(etxt)
 			return 0, errors.New(etxt)
 		}
 
 		if payloadLen > MAX_PAYLOAD_LEN {
-			logger.LogErr(fmt.Sprintf("[Insane payloadLen:%v]\n", payloadLen))
+			logger.LogDebug(fmt.Sprintf("[Insane payloadLen:%v]\n", payloadLen))
 			hc.Close()
 			return 1, errors.New("Insane payloadLen")
 		}
@@ -757,11 +757,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				return 0, io.EOF
 			}
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				logger.LogNotice(fmt.Sprintln("[Client hung up]"))
+				logger.LogDebug(fmt.Sprintln("[Client hung up]"))
 				return 0, io.EOF
 			}
 			etxt := fmt.Sprintf("** Failed read:%s (%s) **", "payloadBytes", err)
-			logger.LogErr(etxt)
+			logger.LogDebug(etxt)
 			return 0, errors.New(etxt)
 		}
 
@@ -806,45 +806,57 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				if len(payloadBytes) > 0 {
 					hc.SetStatus(CSOType(binary.BigEndian.Uint32(payloadBytes)))
 				} else {
-					logger.LogErr(fmt.Sprintln("[truncated payload, cannot determine CSOExitStatus]"))
+					logger.LogDebug(fmt.Sprintln("[truncated payload, cannot determine CSOExitStatus]"))
 					hc.SetStatus(CSETruncCSO)
 				}
 				hc.Close()
 			} else if ctrlStatOp == CSOTunSetup {
 				// server side tunnel setup in response to client
-				lport := binary.BigEndian.Uint16(payloadBytes)
+				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				log.Printf("Tunnel setup [%d:%d]\r\n", lport, rport)
-				StartServerTunnel(&hc, lport, rport)
+				logger.LogDebug(fmt.Sprintf("Read(): Tunnel setup [%d:%d]", lport, rport))
+				hc.StartServerTunnel(lport, rport)
 			} else if ctrlStatOp == CSOTunSetupAck {
-				// client side has received ack from server
-				lport := binary.BigEndian.Uint16(payloadBytes)
+				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				log.Printf("Tunnel ack [%d:%d]\r\n", lport, rport)
-			} else if ctrlStatOp == CSOTunData {
-				lport := binary.BigEndian.Uint16(payloadBytes)
-				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				_ = lport
-				//fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
-				if hc.tuns[rport] == nil {
-					fmt.Printf("[Invalid rport:%d]\r\n", rport)
-				} else {
-					hc.tuns[rport].Data <- payloadBytes[4:]
-				}
-			} else {
+				logger.LogDebug(fmt.Sprintf("Read(): Tunnel setup ack [%d:%d]", lport, rport))
 				hc.dBuf.Write(payloadBytes)
-				//log.Printf("hc.dBuf: %s\n", hex.Dump(hc.dBuf.Bytes()))
+			} else if ctrlStatOp == CSOTunRefused {
+				// client side has been told nothing is listening on rport
+				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				logger.LogDebug(fmt.Sprintf("Read(): Tunnel refused [%d:%d]", lport, rport))
+			} else if ctrlStatOp == CSOTunDisconn {
+				// server side's rport has disconnected (server lost)
+				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				logger.LogDebug(fmt.Sprintf("Read(): Tunnel server disconnected [%d:%d]", lport, rport))
+			} else if ctrlStatOp == CSOTunHangup {
+				// client side's lport has hung up
+				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				logger.LogDebug(fmt.Sprintf("Read(): Tunnel client hung up [%d:%d]", lport, rport))
+			} else if ctrlStatOp == CSOTunData {
+				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
+				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				//fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
+				logger.LogDebug(fmt.Sprintf("[Writing data to rport [%d:%d] %v", lport, rport, payloadBytes[4:]))
+				hc.tuns[rport].Data <- payloadBytes[4:]
+			} else if ctrlStatOp == CSONone {
+				hc.dBuf.Write(payloadBytes)
+			} else {
+				logger.LogDebug(fmt.Sprintf("[Unknown CSOType:%d]", ctrlStatOp))
 			}
 
 			hTmp := hc.rm.Sum(nil)[0:HMAC_CHK_SZ]
 			log.Printf("<%04x) HMAC:(i)%s (c)%02x\r\n", decryptN, hex.EncodeToString([]byte(hmacIn[0:])), hTmp)
 
 			if *hc.closeStat == CSETruncCSO {
-				logger.LogErr(fmt.Sprintln("[cannot verify HMAC]"))
+				logger.LogDebug(fmt.Sprintln("[cannot verify HMAC]"))
 			} else {
 				// Log alert if hmac didn't match, corrupted channel
 				if !bytes.Equal(hTmp, []byte(hmacIn[0:])) /*|| hmacIn[0] > 0xf8*/ {
-					logger.LogErr(fmt.Sprintln("** ALERT - detected HMAC mismatch, possible channel tampering **"))
+					logger.LogDebug(fmt.Sprintln("** ALERT - detected HMAC mismatch, possible channel tampering **"))
 					_, _ = (*hc.c).Write([]byte{CSOHmacInvalid})
 				}
 			}
@@ -879,25 +891,6 @@ func (hc *Conn) WritePacket(b []byte, ctrlStatOp byte) (n int, err error) {
 
 	if hc.m == nil || hc.wm == nil {
 		return 0, errors.New("Secure chan not ready for writing")
-	}
-
-	if ctrlStatOp == CSOTunSetup {
-		// Client-side tunnel setup
-		lport := binary.BigEndian.Uint16(b)
-		rport := binary.BigEndian.Uint16(b[2:4])
-		// spawn workers to listen for data and tunnel events
-		// via channel comms to hc.tuns[rport].tunCtl
-		StartClientTunnel(hc, lport, rport)
-		// CSOTunSetup is written through to server side,
-		// see hc.Read()
-	} else if ctrlStatOp == CSOTunSetupAck {
-		lport := binary.BigEndian.Uint16(b)
-		rport := binary.BigEndian.Uint16(b[2:4])
-		if lport == 0 || rport == 0 {
-			log.Printf("Responded with tunnel setup nak [%d:%d]\r\n", lport, rport)
-		} else {
-			log.Printf("Responded with tunnel setup ack [%d:%d]\r\n", lport, rport)
-		}
 	}
 
 	//Padding prior to encryption
