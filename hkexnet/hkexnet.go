@@ -816,6 +816,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("Read(): Tunnel setup [%d:%d]", lport, rport))
 				hc.StartServerTunnel(lport, rport)
+				hc.tuns[rport].Ctl <- 'a' // Dial() rport
 			} else if ctrlStatOp == CSOTunSetupAck {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
@@ -826,22 +827,29 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("Read(): Tunnel refused [%d:%d]", lport, rport))
+				hc.dBuf.Write(payloadBytes)
 			} else if ctrlStatOp == CSOTunDisconn {
 				// server side's rport has disconnected (server lost)
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("Read(): Tunnel server disconnected [%d:%d]", lport, rport))
+				hc.dBuf.Write(payloadBytes)
 			} else if ctrlStatOp == CSOTunHangup {
 				// client side's lport has hung up
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("Read(): Tunnel client hung up [%d:%d]", lport, rport))
+				hc.dBuf.Write(payloadBytes)
 			} else if ctrlStatOp == CSOTunData {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				//fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
-				logger.LogDebug(fmt.Sprintf("[Writing data to rport [%d:%d] %v", lport, rport, payloadBytes[4:]))
-				hc.tuns[rport].Data <- payloadBytes[4:]
+				if hc.tuns[rport] != nil {
+					logger.LogDebug(fmt.Sprintf("[Writing data to rport [%d:%d]", lport, rport))
+					hc.tuns[rport].Data <- payloadBytes[4:]
+				} else {
+					logger.LogDebug(fmt.Sprintf("[Attempt to write data to closed tun [%d:%d]", lport, rport))
+				}
 			} else if ctrlStatOp == CSONone {
 				hc.dBuf.Write(payloadBytes)
 			} else {
