@@ -349,26 +349,7 @@ func reqTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) {
 	fmt.Printf("bTmp:%x\n", bTmp.Bytes())
 	logger.LogDebug(fmt.Sprintln("[Client sending CSOTunSetup]"))
 	hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunSetup)
-	
-	// Server should reply immediately with CSOTunSetupAck[lport:rport]
-	// hkexnet.Read() on server side handles server side tun setup.
-	resp := make([]byte, 4)
-	var lpResp, rpResp uint16
-	n, e := io.ReadFull(hc, resp)
-	if n < 4 || e != nil {
-		logger.LogErr(fmt.Sprintf("[Client tun response len %d, %s\n", n, e))
-	} else {
-		lpResp = binary.BigEndian.Uint16(resp[0:2])
-		rpResp = binary.BigEndian.Uint16(resp[2:4])
-	}
 
-	if lpResp == lp && rpResp == rp {
-		logger.LogDebug("[Client got tun setup ack OK]")
-		hc.StartClientTunnel(lp, rp)
-	} else {
-		logger.LogDebug(fmt.Sprintf("[Client tun response ports [%d:%d]\n", lpResp, rpResp))
-		logger.LogDebug(fmt.Sprintln("[Client tun setup FAILED]"))
-	}
 	return
 }
 

@@ -56,7 +56,6 @@ const (
 
 	// Tunnel setup/control/status
 	CSOTunSetup    // client -> server tunnel setup request (dstport)
-	CSOTunInUse    // server -> client: tunnel rport is in use
 	CSOTunSetupAck // server -> client tunnel setup ack
 	CSOTunAccept   // client -> server: tunnel client got an Accept()
 	// (Do we need a CSOTunAcceptAck server->client?)
@@ -66,23 +65,26 @@ const (
 	CSOTunHangup  // client -> server: tunnel lport hung up
 )
 
-// TunEndpoint.tunCtl control values
+// TunEndpoint.tunCtl control values - used to control workers for client or server tunnels
+// depending on the code
 const (
-	TunCtl_AcceptedClient = 'a' // client side has accept()ed a conn
+	TunCtl_Client_Listen = 'a'
+	
+	TunCtl_Server_Dial = 'd' // server has dialled OK, client side can accept() conns
 	// [CSOTunAccept]
 	// status: client listen() worker accepted conn on lport
 	// action:server side should dial() rport on client's behalf
 
-	TunCtl_LostClient = 'h' // client side has hung up
+	TunCtl_Info_Hangup = 'h' // client side has hung up
 	// [CSOTunHangup]
 	// status: client side conn hung up from lport
 	// action:server side should hang up on rport, on client's behalf
 
-	TunCtl_ConnRefused = 'r' // server side couldn't complete tunnel
+	TunCtl_Info_ConnRefused = 'r' // server side couldn't complete tunnel
 	// [CSOTunRefused]
 	// status:server side could not dial() remote side
-
-	TunCtl_LostConn = 'l' // server side disconnected
+	
+	TunCtl_Info_LostConn = 'x' // server side disconnected
 	// [CSOTunDisconn]
 	// status:server side lost connection to rport
 	// action:client should disconnect accepted lport connection

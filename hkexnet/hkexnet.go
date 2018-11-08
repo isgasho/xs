@@ -85,7 +85,7 @@ type (
 		Cols       uint16
 
 		chaff ChaffConfig
-		tuns  map[uint16]*TunEndpoint
+		tuns  *map[uint16](*TunEndpoint)
 
 		closeStat *CSOType      // close status (CSOExitStatus)
 		r         cipher.Stream //read cipherStream
@@ -208,6 +208,8 @@ func _new(kexAlg KEXAlg, conn *net.Conn) (hc *Conn, e error) {
 		closeStat: new(CSOType),
 		WinCh:     make(chan WinSize, 1),
 		dBuf:      new(bytes.Buffer)}
+	tempMap := make(map[uint16]*TunEndpoint)
+	hc.tuns = &tempMap
 
 	*hc.closeStat = CSEStillOpen // open or prematurely-closed status
 
@@ -814,39 +816,58 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				// server side tunnel setup in response to client
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				logger.LogDebug(fmt.Sprintf("Read(): Tunnel setup [%d:%d]", lport, rport))
-				hc.StartServerTunnel(lport, rport)
-				hc.tuns[rport].Ctl <- 'a' // Dial() rport
+				logger.LogDebug(fmt.Sprintf("mapkey is %d", rport))
+				if _, ok := (*hc.tuns)[rport]; !ok {
+					// tunnel first-time open
+					logger.LogDebug(fmt.Sprintf("[Server] Got Initial CSOTunSetup [%d:%d]", lport, rport))
+					hc.StartServerTunnel(lport, rport)
+				} else {
+					logger.LogDebug(fmt.Sprintf("[Server] Got CSOTunSetup [%d:%d]", lport, rport))
+				}
+				(*hc.tuns)[rport].Ctl <- 'd' // Dial() rport
 			} else if ctrlStatOp == CSOTunSetupAck {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				logger.LogDebug(fmt.Sprintf("Read(): Tunnel setup ack [%d:%d]", lport, rport))
-				hc.dBuf.Write(payloadBytes)
+				logger.LogDebug(fmt.Sprintf("mapkey is %d\n", rport))
+				if _, ok := (*hc.tuns)[rport]; !ok {
+					// tunnel first-time open
+					logger.LogDebug(fmt.Sprintf("[Client] Got Initial CSOTunSetupAck [%d:%d]", lport, rport))
+					hc.StartClientTunnel(lport, rport)
+				} else {
+					logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunSetupAck [%d:%d]", lport, rport))
+				}
+				(*hc.tuns)[rport].Ctl <- 'a' // Listen() for lport connection
 			} else if ctrlStatOp == CSOTunRefused {
-				// client side has been told nothing is listening on rport
+				// client side receiving CSOTunRefused means the remote side
+				// could not dial() rport. So we cannot yet listen()
+				// for client-side on lport.
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				logger.LogDebug(fmt.Sprintf("Read(): Tunnel refused [%d:%d]", lport, rport))
-				hc.dBuf.Write(payloadBytes)
+				logger.LogDebug(fmt.Sprintf("mapkey is %d\n", rport))
+				logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunRefused [%d:%d]", lport, rport))
+				(*hc.tuns)[rport].Ctl <- 'r' // client should NOT Listen()
 			} else if ctrlStatOp == CSOTunDisconn {
 				// server side's rport has disconnected (server lost)
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				logger.LogDebug(fmt.Sprintf("Read(): Tunnel server disconnected [%d:%d]", lport, rport))
-				hc.dBuf.Write(payloadBytes)
+				logger.LogDebug(fmt.Sprintf("mapkey is %d\n", rport))
+				logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunDisconn [%d:%d]", lport, rport))
+				(*hc.tuns)[rport].Ctl <- 'x' // client should hangup on current lport conn
 			} else if ctrlStatOp == CSOTunHangup {
 				// client side's lport has hung up
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
-				logger.LogDebug(fmt.Sprintf("Read(): Tunnel client hung up [%d:%d]", lport, rport))
-				hc.dBuf.Write(payloadBytes)
+				logger.LogDebug(fmt.Sprintf("mapkey is %d\n", rport))
+				logger.LogDebug(fmt.Sprintf("[Server] Got CSOTunHangup [%d:%d]", lport, rport))
+				(*hc.tuns)[rport].Ctl <- 'h' // server should hang up on currently-dialled rport
 			} else if ctrlStatOp == CSOTunData {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
+				logger.LogDebug(fmt.Sprintf("mapkey is %d\n", rport))
 				//fmt.Printf("[Got CSOTunData: [lport %d:rport %d] data:%v\n", lport, rport, payloadBytes[4:])
-				if hc.tuns[rport] != nil {
+				if _, ok := (*hc.tuns)[rport]; ok {
 					logger.LogDebug(fmt.Sprintf("[Writing data to rport [%d:%d]", lport, rport))
-					hc.tuns[rport].Data <- payloadBytes[4:]
+					(*hc.tuns)[rport].Data <- payloadBytes[4:]
 				} else {
 					logger.LogDebug(fmt.Sprintf("[Attempt to write data to closed tun [%d:%d]", lport, rport))
 				}
