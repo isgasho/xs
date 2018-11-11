@@ -173,6 +173,7 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 		weAreDialled := false
 		for cmd := range t.Ctl {
 			var c net.Conn
+			logger.LogDebug(fmt.Sprintf("[ServerTun] got Ctl '%c'. weAreDialled: %v", cmd, weAreDialled))
 			if cmd == 'd' && !weAreDialled {
 				logger.LogDebug("[ServerTun] dialling...")
 				c, err = net.Dial("tcp", fmt.Sprintf(":%d", rport))
@@ -253,8 +254,7 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 				}
 			} else if cmd == 'h' {
 				// client side has hung up
-				logger.LogDebug(fmt.Sprintf("[ServerTun] Client hung up: hanging up on rport %v", t))
-				weAreDialled = false
+				logger.LogDebug(fmt.Sprintf("[ServerTun] Client hung up on rport %v", t))
 			}
 		} // t.Ctl read loop
 		logger.LogDebug("[ServerTun] Tunnel exiting t.Ctl read loop - channel closed??")
