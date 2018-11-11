@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"blitter.com/go/hkexsh/logger"
 )
@@ -92,15 +93,20 @@ func (hc *Conn) StartClientTunnel(lport, rport uint16) {
 
 						if e != nil {
 							logger.LogDebug(fmt.Sprintf("[ClientTun] Accept() got error(%v), hanging up.", e))
-							break
+							//break
 						} else {
 							logger.LogDebug(fmt.Sprintf("[ClientTun] Accepted tunnel client %v", t))
 
+							c.SetDeadline(time.Now().Add(10 * time.Second))
 							// outside client -> tunnel lport
 							go func() {
 								defer func() {
-									c.Close()
+									if c.Close() != nil {
+										logger.LogDebug("[ClientTun] worker A: conn c already closed")
+									}
 								}()
+
+								logger.LogDebug("[ClientTun] worker A: starting")
 
 								var tunDst bytes.Buffer
 								binary.Write(&tunDst, binary.BigEndian, lport)
@@ -111,43 +117,50 @@ func (hc *Conn) StartClientTunnel(lport, rport uint16) {
 									n, e := c.Read(rBuf)
 									if e != nil {
 										if e == io.EOF {
-											logger.LogDebug(fmt.Sprintf("[ClientTun] lport Disconnected: shutting down tunnel %v", t))
+											logger.LogDebug(fmt.Sprintf("[ClientTun] worker A: lport Disconnected: shutting down tunnel %v", t))
 										} else {
-											logger.LogDebug(fmt.Sprintf("[ClientTun] Read error from lport of tun %v\n%s", t, e))
+											logger.LogDebug(fmt.Sprintf("[ClientTun] worker A: Read error from lport of tun %v\n%s", t, e))
 										}
 										hc.WritePacket(tunDst.Bytes(), CSOTunHangup)
 										break
 									}
+									c.SetDeadline(time.Now().Add(10 * time.Second))
 									if n > 0 {
 										rBuf = append(tunDst.Bytes(), rBuf[:n]...)
 										_, de := hc.WritePacket(rBuf[:n+4], CSOTunData)
 										if de != nil {
-											logger.LogDebug(fmt.Sprintf("[ClientTun] Error writing to tunnel %v, %s]\n", t, de))
+											logger.LogDebug(fmt.Sprintf("[ClientTun] worker A: Error writing to tunnel %v, %s]\n", t, de))
 											break
 										}
 									}
 								}
+								logger.LogDebug("[ClientTun] worker A: exiting")
 							}()
 
 							// tunnel lport -> outside client (c)
 							go func() {
 								defer func() {
-									c.Close()
+									if c.Close() != nil {
+										logger.LogDebug("[ClientTun] worker B: conn c already closed")
+									}
 								}()
+
+								logger.LogDebug("[ClientTun] worker B: starting")
 
 								for {
 									bytes, ok := <-t.Data
 									if ok {
 										_, e := c.Write(bytes)
 										if e != nil {
-											logger.LogDebug(fmt.Sprintf("[ClientTun] lport conn closed"))
+											logger.LogDebug(fmt.Sprintf("[ClientTun] worker B: lport conn closed"))
 											break
 										}
 									} else {
-										logger.LogDebug(fmt.Sprintf("[ClientTun] Channel closed?"))
+										logger.LogDebug(fmt.Sprintf("[ClientTun] worker B: Channel closed?"))
 										break
 									}
 								}
+								logger.LogDebug("[ClientTun] worker B: exiting")
 							}()
 
 						} // end Accept() worker block
@@ -197,10 +210,14 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 					//
 					go func() {
 						defer func() {
-							logger.LogDebug("[ServerTun] (deferred hangup workerA)")
-							c.Close()
+							logger.LogDebug("[ServerTun] worker A: deferred hangup")
+							if c.Close() != nil {
+								logger.LogDebug("[ServerTun] workerA: conn c already closed")
+							}
 							weAreDialled = false
 						}()
+
+						logger.LogDebug("[ServerTun] worker A: starting")
 
 						var tunDst bytes.Buffer
 						binary.Write(&tunDst, binary.BigEndian, t.Lport)
@@ -211,15 +228,15 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 							n, e := c.Read(rBuf)
 							if e != nil {
 								if e == io.EOF {
-									logger.LogDebug(fmt.Sprintf("[ServerTun] rport Disconnected: shutting down tunnel %v", t))
+									logger.LogDebug(fmt.Sprintf("[ServerTun] worker A: rport Disconnected: shutting down tunnel %v", t))
 								} else {
-									logger.LogDebug(fmt.Sprintf("[ServerTun] Read error from rport of tun %v: %s", t, e))
+									logger.LogDebug(fmt.Sprintf("[ServerTun] worker A: Read error from rport of tun %v: %s", t, e))
 								}
 								var resp bytes.Buffer
 								binary.Write(&resp, binary.BigEndian, lport)
 								binary.Write(&resp, binary.BigEndian, rport)
 								hc.WritePacket(resp.Bytes(), CSOTunDisconn)
-								logger.LogDebug(fmt.Sprintf("[ServerTun] Closing server rport %d net.Dial()", t.Rport))
+								logger.LogDebug(fmt.Sprintf("[ServerTun] worker A: Closing server rport %d net.Dial()", t.Rport))
 								break
 							}
 							if n > 0 {
@@ -227,29 +244,34 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 								hc.WritePacket(rBuf[:n+4], CSOTunData)
 							}
 						}
+						logger.LogDebug("[ServerTun] worker A: exiting")
 					}()
 
 					// worker to read data from client (already decrypted) & fwd to rport
 					go func() {
 						defer func() {
-							logger.LogDebug("[ServerTun] (deferred hangup workerB)")
-							c.Close()
+							logger.LogDebug("[ServerTun] worker B: deferred hangup")
+							if c.Close() != nil {
+								logger.LogDebug("[ServerTun] worker B: conn c already closed")
+							}
 							weAreDialled = false
 						}()
 
+						logger.LogDebug("[ServerTun] worker B: starting")
 						for {
 							rData, ok := <-t.Data
 							if ok {
 								_, e := c.Write(rData)
 								if e != nil {
-									logger.LogDebug(fmt.Sprintf("[ServerTun] ERROR writing to rport conn"))
+									logger.LogDebug(fmt.Sprintf("[ServerTun] worker B: ERROR writing to rport conn"))
 									break
 								}
 							} else {
-								logger.LogDebug("[ServerTun] ERROR reading from hc.tuns[] channel - closed?")
+								logger.LogDebug("[ServerTun] worker B: ERROR reading from hc.tuns[] channel - closed?")
 								break
 							}
 						}
+						logger.LogDebug("[ServerTun] worker B: exiting")
 					}()
 				}
 			} else if cmd == 'h' {

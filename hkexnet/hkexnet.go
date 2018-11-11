@@ -848,6 +848,8 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunDisconn [%d:%d]", lport, rport))
+				// 20181111 rlm: I think we need to kick client workers out of pending Read()s here,
+				// only way is by forcibly closing the net conn.
 				(*hc.tuns)[rport].Ctl <- 'x' // client should hangup on current lport conn
 			} else if ctrlStatOp == CSOTunHangup {
 				// client side's lport has hung up
