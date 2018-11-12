@@ -346,7 +346,6 @@ func reqTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) {
 	var bTmp bytes.Buffer
 	binary.Write(&bTmp, binary.BigEndian, lp)
 	binary.Write(&bTmp, binary.BigEndian, rp)
-	fmt.Printf("bTmp:%x\n", bTmp.Bytes())
 	logger.LogDebug(fmt.Sprintln("[Client sending CSOTunSetup]"))
 	hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunSetup)
 

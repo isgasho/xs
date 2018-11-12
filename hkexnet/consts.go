@@ -58,42 +58,24 @@ const (
 	CSOTunSetup    // client -> server tunnel setup request (dstport)
 	CSOTunSetupAck // server -> client tunnel setup ack
 	CSOTunAccept   // client -> server: tunnel client got an Accept()
-	// (Do we need a CSOTunAcceptAck server->client?)
-	CSOTunRefused   // server -> client: tunnel rport connection refused
-	CSOTunData      // packet contains tunnel data [rport:data]
-	CSOTunDisconn   // server -> client: tunnel rport disconnected
-	CSOTunHangup    // client -> server: tunnel lport hung up
+	CSOTunRefused  // server -> client: tunnel rport connection refused
+	CSOTunData     // packet contains tunnel data [rport:data]
+	CSOTunDisconn  // server -> client: tunnel rport disconnected
+	CSOTunHangup   // client -> server: tunnel lport hung up
 )
 
 // TunEndpoint.tunCtl control values - used to control workers for client or server tunnels
 // depending on the code
 const (
 	TunCtl_Client_Listen = 'a'
+	// [CSOTunAccept]
+	// status: server has ack'd tun setup request
+	// action: client should accept (after re-listening, if required) on lport
 
 	TunCtl_Server_Dial = 'd' // server has dialled OK, client side can accept() conns
 	// [CSOTunAccept]
-	// status: client listen() worker accepted conn on lport
+	// status: client wants to open tunnel to rport
 	// action:server side should dial() rport on client's behalf
-
-	// -rlm 20181111 - useless as serverTun worker might in within a Read() or Write(),
-	// so timeouts must be used and tun.Died flag
-	// --
-	//TunCtl_Info_Hangup = 'h' // client side has hung up
-	// [CSOTunHangup]
-	// status: client side conn hung up from lport
-	// action:server side should hang up on rport, on client's behalf
-
-	TunCtl_Info_ConnRefused = 'r' // server side couldn't complete tunnel
-	// [CSOTunRefused]
-	// status:server side could not dial() remote side
-
-	// -rlm 20181111 - useless as clientTun worker might in within a Read() or Write(),
-	// so timeouts must be used and tun.Died flag
-	// --
-	//TunCtl_Info_LostConn = 'x' // server side disconnected
-	// [CSOTunDisconn]
-	// status:server side lost connection to rport
-	// action:client should disconnect accepted lport connection
 )
 
 // Channel status Op byte type

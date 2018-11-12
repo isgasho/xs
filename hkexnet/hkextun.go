@@ -230,8 +230,6 @@ func (hc *Conn) StartClientTunnel(lport, rport uint16) {
 						delete((*hc.tuns), rport)
 					} // end for-accept
 				} // end Listen() block
-			} else if cmd == 'r' {
-				logger.LogDebug(fmt.Sprintf("[ClientTun] Server replied TunRefused %v\n", (*hc.tuns)[rport]))
 			}
 		} // end t.Ctl for
 	}()
