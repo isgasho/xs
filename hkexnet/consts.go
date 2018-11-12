@@ -55,13 +55,14 @@ const (
 	CSOChaff              // Dummy packet, do not pass beyond decryption
 
 	// Tunnel setup/control/status
-	CSOTunSetup    // client -> server tunnel setup request (dstport)
-	CSOTunSetupAck // server -> client tunnel setup ack
-	CSOTunAccept   // client -> server: tunnel client got an Accept()
-	CSOTunRefused  // server -> client: tunnel rport connection refused
-	CSOTunData     // packet contains tunnel data [rport:data]
-	CSOTunDisconn  // server -> client: tunnel rport disconnected
-	CSOTunHangup   // client -> server: tunnel lport hung up
+	CSOTunSetup     // client -> server tunnel setup request (dstport)
+	CSOTunSetupAck  // server -> client tunnel setup ack
+	CSOTunAccept    // client -> server: tunnel client got an Accept()
+	CSOTunRefused   // server -> client: tunnel rport connection refused
+	CSOTunData      // packet contains tunnel data [rport:data]
+	CSOTunKeepAlive // client tunnel heartbeat
+	CSOTunDisconn   // server -> client: tunnel rport disconnected
+	CSOTunHangup    // client -> server: tunnel lport hung up
 )
 
 // TunEndpoint.tunCtl control values - used to control workers for client or server tunnels

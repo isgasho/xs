@@ -877,6 +877,15 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				} else {
 					logger.LogDebug(fmt.Sprintf("[Attempt to write data to closed tun [%d:%d]", lport, rport))
 				}
+			} else if ctrlStatOp == CSOTunKeepAlive {
+					// client side has sent keepalive for tunnels -- if client
+					// dies or exits unexpectedly the absence of this will
+					// let the server know to hang up on Dial()ed server rports.
+				_ = binary.BigEndian.Uint16(payloadBytes[0:2])
+				//logger.LogDebug(fmt.Sprintf("[Server] Got CSOTunKeepAlive"))
+				for _, t := range *hc.tuns {
+					t.KeepAlive = 0
+				}
 			} else if ctrlStatOp == CSONone {
 				hc.dBuf.Write(payloadBytes)
 			} else {

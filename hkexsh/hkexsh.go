@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
@@ -637,6 +638,14 @@ func main() {
 			defer conn.DisableChaff()
 			defer conn.ShutdownChaff()
 		}
+
+		// Keepalive for any tunnels that may exist
+		go func() {
+			for {
+				time.Sleep(time.Duration(2) * time.Second)
+				conn.WritePacket([]byte{0,0}, hkexnet.CSOTunKeepAlive)
+			}
+		}()
 
 		if shellMode {
 			// TESTING - tunnel

@@ -42,12 +42,13 @@ type (
 
 	// TunEndpoint [securePort:peer:dataPort]
 	TunEndpoint struct {
-		Rport uint16    // Names are from client's perspective
-		Lport uint16    // ... ie., RPort is on server, LPort is on client
-		Peer  string    //net.Addr
-		Died  bool      // set by client upon receipt of a CSOTunDisconn
-		Ctl   chan rune //See TunCtl_* consts
-		Data  chan []byte
+		Rport     uint16    // Names are from client's perspective
+		Lport     uint16    // ... ie., RPort is on server, LPort is on client
+		Peer      string    //net.Addr
+		Died      bool      // set by client upon receipt of a CSOTunDisconn
+		KeepAlive uint      // must be reset by client to keep server dial() alive
+		Ctl       chan rune //See TunCtl_* consts
+		Data      chan []byte
 	}
 )
 
@@ -328,6 +329,14 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 								rBuf = append(tunDst.Bytes(), rBuf[:n]...)
 								hc.WritePacket(rBuf[:n+4], CSOTunData)
 							}
+
+							if (*hc.tuns)[rport].KeepAlive > 50 {
+									(*hc.tuns)[rport].Died = true
+									logger.LogDebug("[ServerTun] worker A: Oh dear, client appears to have died. Hanging up rport Dial().")
+							} else {
+								(*hc.tuns)[rport].KeepAlive += 1
+							}
+
 						}
 						logger.LogDebug("[ServerTun] worker A: exiting")
 					}()
