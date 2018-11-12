@@ -55,47 +55,6 @@ func GetSize() (cols, rows int, err error) {
 	return
 }
 
-func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, otherArgs []string) {
-	// Whether fancyArg is src or dst file depends on flag.Args() index;
-	//  fancyArg as last flag.Args() element denotes dstFile
-	//  fancyArg as not-last flag.Args() element denotes srcFile
-	var fancyUser, fancyHost, fancyPath string
-	for i, arg := range a {
-		if strings.Contains(arg, ":") || strings.Contains(arg, "@") {
-			fancyArg := strings.Split(flag.Arg(i), "@")
-			var fancyHostPath []string
-			if len(fancyArg) < 2 {
-				//TODO: no user specified, use current
-				fancyUser = "[default:getUser]"
-				fancyHostPath = strings.Split(fancyArg[0], ":")
-			} else {
-				// user@....
-				fancyUser = fancyArg[0]
-				fancyHostPath = strings.Split(fancyArg[1], ":")
-			}
-
-			// [...@]host[:path]
-			if len(fancyHostPath) > 1 {
-				fancyPath = fancyHostPath[1]
-			}
-			fancyHost = fancyHostPath[0]
-
-			//if fancyPath == "" {
-			//	fancyPath = "."
-			//}
-
-			if i == len(a)-1 {
-				isDest = true
-				//fmt.Println("remote path isDest")
-			}
-			//fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "path:", fancyPath)
-		} else {
-			otherArgs = append(otherArgs, a[i])
-		}
-	}
-	return fancyUser, fancyHost, fancyPath, isDest, otherArgs
-}
-
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
 func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.Session) (err error, exitStatus uint32) {
 	if remoteDest {
@@ -355,6 +314,52 @@ func reqTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) {
 	return
 }
 
+func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, otherArgs []string) {
+	// Whether fancyArg is src or dst file depends on flag.Args() index;
+	//  fancyArg as last flag.Args() element denotes dstFile
+	//  fancyArg as not-last flag.Args() element denotes srcFile
+	var fancyUser, fancyHost, fancyPath string
+	for i, arg := range a {
+		if strings.Contains(arg, ":") || strings.Contains(arg, "@") {
+			fancyArg := strings.Split(flag.Arg(i), "@")
+			var fancyHostPath []string
+			if len(fancyArg) < 2 {
+				//TODO: no user specified, use current
+				fancyUser = "[default:getUser]"
+				fancyHostPath = strings.Split(fancyArg[0], ":")
+			} else {
+				// user@....
+				fancyUser = fancyArg[0]
+				fancyHostPath = strings.Split(fancyArg[1], ":")
+			}
+
+			// [...@]host[:path]
+			if len(fancyHostPath) > 1 {
+				fancyPath = fancyHostPath[1]
+			}
+			fancyHost = fancyHostPath[0]
+
+			//if fancyPath == "" {
+			//	fancyPath = "."
+			//}
+
+			if i == len(a)-1 {
+				isDest = true
+				//fmt.Println("remote path isDest")
+			}
+			//fmt.Println("fancyArgs: user:", fancyUser, "host:", fancyHost, "path:", fancyPath)
+		} else {
+			otherArgs = append(otherArgs, a[i])
+		}
+	}
+	return fancyUser, fancyHost, fancyPath, isDest, otherArgs
+}
+
+func launchTuns(conn *hkexnet.Conn, remoteHost string, tunSpecs string) {
+	remAddrs, _ := net.LookupHost(remoteHost)
+	reqTunnel(conn, 6001, remAddrs[0], 7001)
+}
+
 // hkexsh - a client for secure shell and file copy operations.
 //
 // While conforming to the basic net.Conn interface HKex.Conn has extra
@@ -410,7 +415,7 @@ func main() {
 		// hkexsh accepts a command (-x) but not
 		// a srcpath (-r) or dstpath (-t)
 		flag.StringVar(&cmdStr, "x", "", "`command` to run (if not specified run interactive shell)")
-		flag.StringVar(&tunSpecStr, "t", "", "`tunnelspec` localPort:remotePort[,localPort:remotePort,...]")
+		flag.StringVar(&tunSpecStr, "T", "", "`tunnelspec` localPort:remotePort[,localPort:remotePort,...]")
 		flag.BoolVar(&gopt, "g", false, "ask server to generate authtoken")
 		shellMode = true
 		flag.Usage = UsageShell
@@ -643,15 +648,12 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(time.Duration(2) * time.Second)
-				conn.WritePacket([]byte{0,0}, hkexnet.CSOTunKeepAlive)
+				conn.WritePacket([]byte{0, 0}, hkexnet.CSOTunKeepAlive)
 			}
 		}()
 
 		if shellMode {
-			// TESTING - tunnel
-			remAddrs, _ := net.LookupHost(remoteHost)
-			reqTunnel(&conn, 6001, remAddrs[0], 7001)
-			// END TESTING - tunnel
+			launchTuns(&conn, remoteHost, tunSpecStr)
 
 			doShellMode(isInteractive, &conn, oldState, rec)
 		} else { // copyMode
