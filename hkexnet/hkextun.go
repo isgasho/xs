@@ -332,7 +332,7 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 
 							if (*hc.tuns)[rport].KeepAlive > 50 {
 									(*hc.tuns)[rport].Died = true
-									logger.LogDebug("[ServerTun] worker A: Oh dear, client appears to have died. Hanging up rport Dial().")
+									logger.LogDebug("[ServerTun] worker A: Client died, hanging up.")
 							} else {
 								(*hc.tuns)[rport].KeepAlive += 1
 							}
