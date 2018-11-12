@@ -842,21 +842,26 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunRefused [%d:%d]", lport, rport))
-				//(*hc.tuns)[rport].Ctl <- 'r' // client should NOT Listen()
 			} else if ctrlStatOp == CSOTunDisconn {
 				// server side's rport has disconnected (server lost)
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunDisconn [%d:%d]", lport, rport))
-				// 20181111 rlm: I think we need to kick client workers out of pending Read()s here,
-				// only way is by forcibly closing the net conn.
-				(*hc.tuns)[rport].Ctl <- 'x' // client should hangup on current lport conn
+				if _, ok := (*hc.tuns)[rport]; ok {
+					(*hc.tuns)[rport].Died = true
+				} else {
+					logger.LogDebug(fmt.Sprintf("[Client] CSOTunDisconn on already-closed tun [%d:%d]", lport, rport))
+				}
 			} else if ctrlStatOp == CSOTunHangup {
 				// client side's lport has hung up
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("[Server] Got CSOTunHangup [%d:%d]", lport, rport))
-				(*hc.tuns)[rport].Ctl <- 'h' // server should hang up on currently-dialled rport
+				if _, ok := (*hc.tuns)[rport]; ok {
+					(*hc.tuns)[rport].Died = true
+				} else {
+					logger.LogDebug(fmt.Sprintf("[Server] CSOTunHangup to already-closed tun [%d:%d]", lport, rport))
+				}
 			} else if ctrlStatOp == CSOTunData {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])

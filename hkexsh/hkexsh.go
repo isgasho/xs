@@ -273,6 +273,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			// gracefully here
 			if !strings.HasSuffix(inerr.Error(), "use of closed network connection") {
 				log.Println(inerr)
+				conn.CollapseAllTunnels(true)
 				os.Exit(1)
 			}
 		}
@@ -310,6 +311,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 				fmt.Println(outerr)
 				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
 				log.Println("[Hanging up]")
+				conn.CollapseAllTunnels(true)
 				os.Exit(0)
 			}
 		}()
@@ -646,6 +648,7 @@ func main() {
 			doShellMode(isInteractive, &conn, oldState, rec)
 		} else { // copyMode
 			_, s := doCopyMode(&conn, pathIsDest, fileArgs, rec)
+			conn.CollapseAllTunnels(true)
 			rec.SetStatus(s)
 		}
 
