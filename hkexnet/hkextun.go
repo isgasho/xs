@@ -96,19 +96,17 @@ func (hc *Conn) StartClientTunnel(lport, rport uint16) {
 
 	go func() {
 		var wg sync.WaitGroup
-		weAreListening := false
 
 		for cmd := range (*hc.tuns)[rport].Ctl {
-			if cmd == 'a' && !weAreListening {
+			if cmd == 'a' {
 				l, e := net.Listen("tcp4", fmt.Sprintf(":%d", lport))
 				if e != nil {
 					logger.LogDebug(fmt.Sprintf("[ClientTun] Could not get lport %d! (%s)", lport, e))
 				} else {
-					weAreListening = true
 					logger.LogDebug(fmt.Sprintf("[ClientTun] Listening for client tunnel port %d", lport))
 
 					for {
-						c, e := l.Accept()
+						c, e := l.Accept() // blocks until new conn
 						// If tunnel is being re-used, re-init it
 						if (*hc.tuns)[rport] == nil {
 							hc.InitTunEndpoint(lport, "", rport)
@@ -226,6 +224,9 @@ func (hc *Conn) StartClientTunnel(lport, rport uint16) {
 
 						} // end Accept() worker block
 						wg.Wait()
+
+						// When both workers have exited due to a disconnect or other
+						// condition, it's safe to remove the tunnel descriptor.
 						logger.LogDebug("[ClientTun] workers exited")
 						delete((*hc.tuns), rport)
 					} // end for-accept

@@ -256,6 +256,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State, rec *hkexsh.Session) {
 	//client reader (from server) goroutine
 	//Read remote end's stdout
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -318,6 +319,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 	// Wait until both stdin and stdout goroutines finish before returning
 	// (ensure client gets all data from server before closing)
 	wg.Wait()
+	return
 }
 
 func UsageShell() {
