@@ -355,9 +355,15 @@ func parseNonSwitchArgs(a []string) (user, host, path string, isDest bool, other
 	return fancyUser, fancyHost, fancyPath, isDest, otherArgs
 }
 
-func launchTuns(conn *hkexnet.Conn, remoteHost string, tunSpecs string) {
+func launchTuns(conn *hkexnet.Conn, remoteHost string, tuns string) {
 	remAddrs, _ := net.LookupHost(remoteHost)
-	reqTunnel(conn, 6001, remAddrs[0], 7001)
+
+	tunSpecs := strings.Split(tuns, ",")
+	for _,tunItem := range tunSpecs {
+		var lPort, rPort uint16
+		_, _ = fmt.Sscanf(tunItem, "%d:%d", &lPort, &rPort)
+		reqTunnel(conn, lPort, remAddrs[0], rPort)
+	}
 }
 
 // hkexsh - a client for secure shell and file copy operations.
