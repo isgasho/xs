@@ -243,11 +243,10 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 	go func() {
 		var wg sync.WaitGroup
 
-		weAreDialled := false
 		for cmd := range (*hc.tuns)[rport].Ctl {
 			var c net.Conn
-			logger.LogDebug(fmt.Sprintf("[ServerTun] got Ctl '%c'. weAreDialled: %v", cmd, weAreDialled))
-			if cmd == 'd' && !weAreDialled {
+			logger.LogDebug(fmt.Sprintf("[ServerTun] got Ctl '%c'.", cmd))
+			if cmd == 'd' {
 				// if re-using tunnel, re-init it
 				if (*hc.tuns)[rport] == nil {
 					hc.InitTunEndpoint(lport, "", rport)
@@ -262,7 +261,6 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 					hc.WritePacket(resp.Bytes(), CSOTunRefused)
 				} else {
 					logger.LogDebug(fmt.Sprintf("[ServerTun] Tunnel Opened - %v", (*hc.tuns)[rport]))
-					weAreDialled = true
 					var resp bytes.Buffer
 					binary.Write(&resp, binary.BigEndian, lport)
 					binary.Write(&resp, binary.BigEndian, rport)
@@ -279,7 +277,6 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 							if c.Close() != nil {
 								logger.LogDebug("[ServerTun] workerA: conn c already closed")
 							}
-							weAreDialled = false
 							wg.Done()
 						}()
 
@@ -343,7 +340,6 @@ func (hc *Conn) StartServerTunnel(lport, rport uint16) {
 							if c.Close() != nil {
 								logger.LogDebug("[ServerTun] worker B: conn c already closed")
 							}
-							weAreDialled = false
 							wg.Done()
 						}()
 
