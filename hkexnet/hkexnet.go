@@ -842,6 +842,11 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
 				rport := binary.BigEndian.Uint16(payloadBytes[2:4])
 				logger.LogDebug(fmt.Sprintf("[Client] Got CSOTunRefused [%d:%d]", lport, rport))
+				if _, ok := (*hc.tuns)[rport]; ok {
+					(*hc.tuns)[rport].Died = true
+				} else {
+					logger.LogDebug(fmt.Sprintf("[Client] CSOTunRefused on already-closed tun [%d:%d]", lport, rport))
+				}
 			} else if ctrlStatOp == CSOTunDisconn {
 				// server side's rport has disconnected (server lost)
 				lport := binary.BigEndian.Uint16(payloadBytes[0:2])
