@@ -142,8 +142,8 @@ Tunnels
 Simple tunnels (only client tunnels from client -> server for now, no reverse
 tunnels) are supported.
 
-Syntax: hkexsh -T=<tunspec>{,<tunspec>...}
-.. where <tunspec> is <localport:remoteport>
+Syntax: hkexsh -T=&lt;tunspec&gt;{,&lt;tunspec&gt;...}
+.. where &lt;tunspec&gt; is &gt;localport:remoteport&gt;
 
 Example, tunnelling ssh through hkexsh
 
