@@ -136,3 +136,17 @@ Put another way, the destination (whether local or remote) is ALWAYS a dir.
 hkexcp uses tar with gzip compression (ala a 'tarpipe') under the hood, sending tar data over
 the hkex encrypted channel. Use the -d flag on client or server to see the generated tar
 commandlines if you're curious.
+
+Tunnels
+--
+Simple tunnels (only client tunnels from client -> server for now, no reverse
+tunnels) are supported.
+
+Syntax: hkexsh -T=<tunspec>{,<tunspec>...}
+.. where <tunspec> is <localport:remoteport>
+
+Example, tunnelling ssh through hkexsh
+
+* [server side] $ sudo /usr/sbin/sshd -p 7002
+* [client side] $ hkexsh -T=6002:7002 @server.hostname
+* [client side] $ ssh user@localhost -p 6002

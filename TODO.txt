@@ -12,16 +12,22 @@ Architecture
   (ie., hkexsh imports hkex) - hkex should be usable for other client/svr utils,
   ala 'hkex-netcat')
   (parts split out into hkexnet/*, hkexsession.go)
-- Make KEx fully-pluggable: isolate all code to do with Herradura into a
+(DONE) - Make KEx fully-pluggable: isolate all code to do with Herradura into a
   KEx-neutral pkg so it can be swapped out for other methods (eg., DH etc.)
 
 Features
 (DONE) - Support for hkcp (hkex-cp) - secure file copy protocol
-(DONE) auth tokens to allow scripted hkexsh/hkexcp use
-- hktun - tunnelling - multiple tunnel sessions co-existing w/shell sessions
+(DONE) - auth tokens to allow scripted hkexsh/hkexcp use
+(DONE) - tunnelling - multiple tunnel sessions co-existing w/shell sessions
+- non-interactive tunnel-only mode
+- reverse tunnels
 
 Alternate transports for hkexsh.Conn - HTTP-mimicking traffic, ICMP, ... ?
 (Whatever golang can support for net.Dial(), net.Accept(), io.Reader/Writer
  should in principle be usable as substrate for hkex.Conn)
-- hekxsh-over-ssh
+
+Install
+- init scripts for open-rc/init (and systemd, sigh)
+- make install
+- common packages (yum/deb/portage)
 
