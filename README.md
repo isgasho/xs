@@ -1,9 +1,15 @@
 HKExSh
 --
 
-'hkexsh' (HerraduraKyberEx shell) is a golang implementation of a simple
+HKExSh (**H**erradura**K**yber**Ex** **Sh**ell) is a golang implementation of a simple
 remote shell client and server, similar in role to ssh, offering
-encrypted interactive and non-interactive sessions, file copying and tunnels.
+encrypted interactive and non-interactive sessions, file copying and tunnels with traffic activity obfuscation ('chaffing').
+
+***
+
+**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
+
+***
 
 The client and server programs (hkexsh and hkexshd) use a mostly drop-in
 replacement for golang's standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept()
@@ -17,12 +23,15 @@ Currently supported exchanges are:
 [Omar Elejandro Herrera Reyna's HerraduraKEx project](http://github.com/Caume/HerraduraKEx);
 * The KYBER IND-CCA-2 secure key encapsulation mechanism, [pq-crystals Kyber](https://pq-crystals.org/kyber/)  :: [Yawning/kyber golang implementation](https://git.schwanenlied.me/yawning/kyber)
 
-Currently supported session encryption and hmac algorithms:
+Currently supported session algorithms:
 
+[Encryption]
 * AES-256
 * Twofish-128
 * Blowfish-64
 * CryptMTv1 (https://eprint.iacr.org/2005/165.pdf)
+
+[HMAC]
 * HMAC-SHA256
 * HMAC-SHA512
 
@@ -38,11 +47,6 @@ Tunnels, if specified, are set up during initial client->server connection negot
 
 Finally, within the hkexpasswd/ directory is a password-setting utility. HKExSh uses its own passwd file distinct from the system /etc/passwd to authenticate clients, using standard bcrypt+salt storage.
 
-***
-
-**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
-
-***
 
 HERRADURA KEX
 
@@ -141,20 +145,16 @@ Local (client) to remote (server) copy:
 Remote (server) to local (client) copy:
 * hkexcp joebloggs@host-or-ip:/remoteDirOrFile /some/where/local/Dir
 
-NOTE: Renaming while copying is NOT supported (ie., like cp's 'cp /foo/bar/fileA ./fileB).
-Put another way, the destination (whether local or remote) is ALWAYS a dir.
+NOTE: Renaming while copying (eg., 'cp /foo/bar/fileA ./fileB') is NOT supported. Put another way, the destination (whether local or remote) must ALWAYS be a directory.
 
-hkexcp uses tar with gzip compression (ala a 'tarpipe') under the hood, sending tar data over
-the hkex encrypted channel. Use the -d flag on client or server to see the generated tar
-commandlines if you're curious.
+hkexcp uses tar (a 'tarpipe') with gzip compression, sending tar data over the hkex encrypted channel. Use the -d flag on client or server to see the generated tar commands if you're curious.
 
 Tunnels
 --
-Simple tunnels (only client tunnels from client -> server for now, no reverse
-tunnels) are supported.
+Simple tunnels (client -> server, no reverse tunnels for now) are supported.
 
 Syntax: hkexsh -T=&lt;tunspec&gt;{,&lt;tunspec&gt;...}
-.. where &lt;tunspec&gt; is &gt;localport:remoteport&gt;
+.. where &lt;tunspec&gt; is &lt;localport:remoteport&gt;
 
 Example, tunnelling ssh through hkexsh
 
