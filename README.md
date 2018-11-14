@@ -8,7 +8,7 @@ encrypted interactive and non-interactive sessions, file copying and tunnels.
 The client and server programs (hkexsh and hkexshd) use a mostly drop-in
 replacement for golang's standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept()
 and the net.Conn type), which automatically negotiate keying material for
-'secure' sockets, using one of a selectable set of experimental key exchange (KEX) or
+secure sockets using one of a selectable set of experimental key exchange (KEX) or
 key encapsulation mechanisms (KEM).
 
 Currently supported exchanges are:
@@ -27,22 +27,22 @@ Currently supported session encryption and hmac algorithms:
 * HMAC-SHA512
 
 
-One can simply replace calls to net.Dial() with hkex.Dial(), and likewise
-net.Listen() with hkex.Listen(), to obtain connections (hkex.Conn) conforming
-to the basic net.Conn interface. Upon Dial(), the HerraduraKEx key exchange
-is initiated (whereby client and server independently derive the same
-keying material).
+Calls to hkexnet.Dial() and hkexnet.Listen()/Accept() are generally the same as calls to the equivalents within the _net_ package; however upon connection a key exchange automatically occurs whereby client and server independently derive the same keying material, and all following traffic is secured by a symmetric encryption algorithm.
 
-Above the hkex.Conn layer, the server and client apps in this repository
-(server/hkexshd and client/hkexsh) negotiate session settings (cipher/hmac
-algorithms, interactive/non-interactive, etc.) to be used for further
-communication.
+Above the hkexnet.Conn layer, the server and client apps in this repository (server/hkexshd and client/hkexsh) negotiate session settings (cipher/hmac algorithms, interactive/non-interactive, etc.) to be used for communication.
 
-Packets are subject to random padding, and (optionally) the client and server
-channels can both send _chaff_ packets at random defineable intervals to help
-thwart analysis of session activity (especially for interactive shell sessions).
+Packets are subject to random padding (size, prefix/postfix), and (optionally) the client and server
+channels can both send _chaff_ packets at random defineable intervals to help thwart analysis of session activity (applicable to interactive and non-interactive command sessions, file copies and tunnels).
 
-NOTE: THIS PROJECT IS EXPERIMENTAL. Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, this package SHOULD BE USED WITH CAUTION and should DEFINITELY NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS IMPLIED.
+Tunnels, if specified, are set up during initial client->server connection negotiation. Packets from the client local port(s) are sent through the main secured connection to the server's remote port(s), and vice versa, tagged with a tunnel specifier so that they can be de-multiplexed and delivered to the proper tunnel endpoints.
+
+Finally, within the hkexpasswd/ directory is a password-setting utility. HKExSh uses its own passwd file distinct from the system /etc/passwd to authenticate clients, using standard bcrypt+salt storage.
+
+***
+
+**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase in general, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
+
+***
 
 HERRADURA KEX
 
@@ -55,11 +55,7 @@ Diffie-Hellman or other key exchange algorithms are currently utilized.
 
 KYBER IND-CCA-2 KEM
 
-As of this time (Oct 2018) Kyber is one of the candidate algorithms submitted to the [NIST post-quantum cryptography project](https://csrc.nist.gov/Projects/Post-Quantum-Cryptography). The authors recommend using it in "... so-called hybrid mode in combination with established "pre-quantum" security; for example in combination with elliptic-curve Diffie-Hellman." THIS PROJECT DOES NOT DO THIS, for purposes of simplicity of code and to evaluate the algorithm in operation by itself (again, THIS PROJECT IS EXPERIMENTAL.)
-
-Finally, within the hkexpasswd/ directory is a password-setting utility
-using its own user/password file distinct from the system /etc/passwd, which
-is used by the hkexshd server to authenticate clients.
+As of this time (Oct 2018) Kyber is one of the candidate algorithms submitted to the [NIST post-quantum cryptography project](https://csrc.nist.gov/Projects/Post-Quantum-Cryptography). The authors recommend using it in "... so-called hybrid mode in combination with established "pre-quantum" security; for example in combination with elliptic-curve Diffie-Hellman." THIS PROJECT DOES NOT DO THIS (in case you didn't notice yet, THIS PROJECT IS EXPERIMENTAL.)
 
 Dependencies:
 --
