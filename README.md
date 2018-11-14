@@ -40,7 +40,7 @@ Finally, within the hkexpasswd/ directory is a password-setting utility. HKExSh 
 
 ***
 
-**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase in general, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
+**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
 
 ***
 
