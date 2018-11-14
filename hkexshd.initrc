@@ -1,0 +1,39 @@
+#!/sbin/openrc-run
+
+SVCNAME=hkexshd
+HKEXSHD_PIDFILE=/var/run/hkexshd.pid
+HKEXSHD_USER=root
+HKEXSHD_HOME=/var/run
+INST_PREFIX=/usr/local
+COMMAND=$INST_PREFIX/sbin/hkexshd
+ARGS=""
+
+depend() {
+    need net
+    use dns logger
+}
+
+checkconfig() {
+    if [ ! -f "$COMMAND" ] ; then
+        eerror "$COMMAND not installed" || return 1
+    fi
+    return 0
+}
+
+start() {
+    checkconfig || return 1
+
+    ebegin "Starting ${SVCNAME}"
+    start-stop-daemon \
+        -d ${HKEXSHD_HOME} \
+        --make-pidfile --pidfile ${HKEXSHD_PIDFILE} \
+        --start --quiet --background \
+        --exec "${COMMAND}" "${ARGS}"
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping ${SVCNAME}"
+    start-stop-daemon --stop --quiet --pidfile $HKEXSHD_PIDFILE
+    eend $?
+}

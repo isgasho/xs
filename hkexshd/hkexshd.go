@@ -26,9 +26,9 @@ import (
 	"syscall"
 
 	"blitter.com/go/goutmp"
-	"blitter.com/go/hkexsh/logger"
 	hkexsh "blitter.com/go/hkexsh"
 	"blitter.com/go/hkexsh/hkexnet"
+	"blitter.com/go/hkexsh/logger"
 	"github.com/kr/pty"
 )
 
