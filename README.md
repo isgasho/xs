@@ -3,7 +3,7 @@ HKExSh
 
 'hkexsh' (HerraduraKyberEx shell) is a golang implementation of a simple
 remote shell client and server, similar in role to ssh, offering
-encrypted interactive and non-interactive sessions as well as file copying.
+encrypted interactive and non-interactive sessions, file copying and tunnels.
 
 The client and server programs (hkexsh and hkexshd) use a mostly drop-in
 replacement for golang's standard golang/pkg/net facilities (net.Dial(), net.Listen(), net.Accept()
