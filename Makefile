@@ -1,8 +1,10 @@
-.PHONY: info clean common client server passwd subpkgs
+.PHONY: info clean common client server passwd subpkgs install uninstall
 
 SUBPKGS = logger spinsult hkexnet herradurakex
 TOOLS = hkexpasswd hkexsh hkexshd
 SUBDIRS = $(LIBS) $(TOOLS)
+
+INSTPREFIX = /usr/local
 
 all: common client server passwd
 
@@ -22,11 +24,14 @@ tools:
 	  $(MAKE) -C $$d all;\
 	done
 
+
 common:
 	go install .
 
+
 client: common
 	$(MAKE) -C hkexsh
+
 
 ifeq ($(MSYSTEM),)
 ifneq ($(GOOS),windows)
@@ -40,6 +45,33 @@ server: common
 	echo "hkexshd server not (yet) supported on Windows"
 endif
 
+
 passwd: common
 	$(MAKE) -C hkexpasswd
 
+
+install:
+	cp hkexsh/hkexsh $(INSTPREFIX)/bin
+ifeq ($(MSYSTEM),)
+ifneq ($(GOOS),windows)
+	cp hkexshd/hkexshd hkexpasswd/hkexpasswd $(INSTPREFIX)/sbin
+else
+	mv $(INSTPREFIX)/bin/hkexsh $(INSTPREFIX)/bin/_hkexsh
+	cp hkexsh/mintty_wrapper.sh $(INSTPREFIX)/bin/hkexsh
+	echo "Cross-build of hkexshd server for Windows not yet supported"
+endif
+else
+	echo "Cross-build of hkexshd server for Windows not yet supported"
+endif
+	cd $(INSTPREFIX)/bin && ln -s hkexsh hkexcp && cd -
+
+
+uninstall:
+	rm -f $(INSTPREFIX)/bin/hkexsh $(INSTPREFIX)/bin/hkexcp $(INSTPREFIX)/bin/_hkexsh
+ifeq ($(MSYSTEM),)
+ifneq ($(GOOS),windows)
+	rm -f $(INSTPREFIX)/sbin/hkexshd $(INSTPREFIX)/sbin/hkexpasswd
+else
+endif
+else
+endif
