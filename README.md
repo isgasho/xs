@@ -74,10 +74,24 @@ Get source code
 * $ cd $GOPATH/src/blitter.com/go/hkexsh
 * $ go build ./... # install all dependent go pkgs
 
+
 To build
 --
 * $ cd $GOPATH/src/blitter.com/go/hkexsh
 * $ make clean all
+
+
+To install
+--
+* $ sudo make install
+
+An example init script (hkexshd.initrc) is provided. Consult your Linux distribution documentation for proper service/daemon installation. Default assumes installation in /usr/local/sbin (hkexshd, hkexpasswd) and /usr/local/bin (hkexsh/hkexcp symlink).
+
+
+To uninstall
+--
+* $ sudo make uninstall
+
 
 To set accounts & passwords:
 --
@@ -85,7 +99,8 @@ To set accounts & passwords:
 * $ sudo hkexpasswd/hkexpasswd -u joebloggs
 * $ &lt;enter a password, enter again to confirm&gt;
 
-Running Clent and Server
+
+Testing Client and Server from $GOPATH dev tree
 --
 In separate shells A and B:
 * [A]$ cd hkexshd && sudo ./hkexshd &  # add -d for debugging
@@ -106,7 +121,7 @@ Setting up an 'authtoken' for scripted (password-free) logins
 --
 Use the -g option of hkexsh to request a token from the remote server, which will return a
 hostname:token string. Place this string into $HOME/.hkexsh_id to allow logins without
-entering a password (obviously, $HOME/.hkexsh_id on both server and client $HOME for the user
+entering a password (obviously, $HOME/.hkexsh_id on both server and client for the user
 should *not* be world-readable.)
 
 File Copying using hkexcp
@@ -121,10 +136,10 @@ remote user. File operations are all performed as the remote user, so account pe
 as expected.
 
 Local (client) to remote (server) copy:
-* cd hkexsh && ./hkexcp fileA /some/where/fileB /some/where/else/dirC joebloggs@host-or-ip:remoteDir
+* hkexcp fileA /some/where/fileB /some/where/else/dirC joebloggs@host-or-ip:remoteDir
 
 Remote (server) to local (client) copy:
-* cd hekxsh && ./hkexcp joebloggs@host-or-ip:/remoteDirOrFile /some/where/local/Dir
+* hkexcp joebloggs@host-or-ip:/remoteDirOrFile /some/where/local/Dir
 
 NOTE: Renaming while copying is NOT supported (ie., like cp's 'cp /foo/bar/fileA ./fileB).
 Put another way, the destination (whether local or remote) is ALWAYS a dir.
@@ -144,5 +159,5 @@ Syntax: hkexsh -T=&lt;tunspec&gt;{,&lt;tunspec&gt;...}
 Example, tunnelling ssh through hkexsh
 
 * [server side] $ sudo /usr/sbin/sshd -p 7002
-* [client side] $ hkexsh -T=6002:7002 @server.hostname
-* [client side] $ ssh user@localhost -p 6002
+* [client side, term A] $ hkexsh -T=6002:7002 user@server
+* [client side, term B] $ ssh user@localhost -p 6002
