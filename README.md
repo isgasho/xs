@@ -92,11 +92,6 @@ To install
 An example init script (hkexshd.initrc) is provided. Consult your Linux distribution documentation for proper service/daemon installation. Default assumes installation in /usr/local/sbin (hkexshd, hkexpasswd) and /usr/local/bin (hkexsh/hkexcp symlink).
 
 
-To uninstall
---
-* $ sudo make uninstall
-
-
 To set accounts & passwords:
 --
 * $ sudo touch /etc/hkexsh.passwd
@@ -161,3 +156,9 @@ Example, tunnelling ssh through hkexsh
 * [server side] $ sudo /usr/sbin/sshd -p 7002
 * [client side, term A] $ hkexsh -T=6002:7002 user@server
 * [client side, term B] $ ssh user@localhost -p 6002
+
+
+To uninstall
+--
+* $ sudo make uninstall
+
