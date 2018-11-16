@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"os/user"
 	"path"
 	"sync"
@@ -394,6 +395,29 @@ func main() {
 	} else {
 		log.SetOutput(ioutil.Discard)
 	}
+
+	// Set up handler for daemon signalling
+	exitCh := make(chan os.Signal, 1)
+	signal.Notify(exitCh, os.Signal(syscall.SIGTERM), os.Signal(syscall.SIGINT), os.Signal(syscall.SIGHUP), os.Signal(syscall.SIGUSR1), os.Signal(syscall.SIGUSR2))
+	go func() {
+		for {
+			sig := <-exitCh
+			switch sig.String() {
+			case "terminated":
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s]", sig))
+				signal.Reset()
+				syscall.Kill(0, syscall.SIGTERM)
+			case "interrupt":
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s]", sig))
+				signal.Reset()
+				syscall.Kill(0, syscall.SIGINT)
+			case "hangup":
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s - nop]", sig))
+			default:
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s - ignored]", sig))
+			}
+		}
+	}()
 
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
