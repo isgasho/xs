@@ -34,7 +34,6 @@ type KEXAlg uint8
 // rather than remote end normal UNIX exit codes
 const (
 	CSENone = 1024 + iota
-	//CSEBadAuth     // Failed login password
 	CSETruncCSO    // No CSOExitStatus in payload
 	CSEStillOpen   // Channel closed unexpectedly
 	CSEExecFail    // cmd.Start() (exec) failed
@@ -57,7 +56,6 @@ const (
 	// Tunnel setup/control/status
 	CSOTunSetup     // client -> server tunnel setup request (dstport)
 	CSOTunSetupAck  // server -> client tunnel setup ack
-	CSOTunAccept    // client -> server: tunnel client got an Accept()
 	CSOTunRefused   // server -> client: tunnel rport connection refused
 	CSOTunData      // packet contains tunnel data [rport:data]
 	CSOTunKeepAlive // client tunnel heartbeat
