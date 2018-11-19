@@ -533,6 +533,7 @@ func (hc *Conn) Close() (err error) {
 	binary.BigEndian.PutUint32(s, uint32(*hc.closeStat))
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
 	hc.WritePacket(s, CSOExitStatus)
+	err = (*hc.c).Close()
 	logger.LogDebug(fmt.Sprintln("[Conn Closing]"))
 	return
 }
