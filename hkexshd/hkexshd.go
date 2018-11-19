@@ -433,6 +433,8 @@ func main() {
 		conn, err := l.Accept()
 		if err != nil {
 			log.Printf("Accept() got error(%v), hanging up.\n", err)
+			conn.Close()
+			//log.Fatal(err)
 		} else {
 			log.Println("Accepted client")
 
