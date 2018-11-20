@@ -1,6 +1,6 @@
 # Code of Merit (1.0-r1)
 
-1. The project creators, lead developers, core team, constitute
+1. The project creators, lead developers, core team, ("The Maintainers") constitute
 the managing members of the project and have final say in every decision
 of the project, technical or otherwise, including overruling previous decisions.
 There are no limitations to this decisional power.
@@ -37,13 +37,13 @@ of the originator to provide requested context.
 
 11. If something is illegal outside the scope of the project, it is illegal
 in the scope of the project. This Code of Merit does not take precedence over
-governing law.
+governing law within the jurisdiction(s) of The Maintainers.
 
     (11.a) If the algorithms implemented in this project (eg., cryptography)
   are illegal or prohibited in your local jurisdiction, it is your personal
   responsibility to consider how, or if, you should attempt to participate in this
-  project. Regardless of the status of those persons mentioned in 1. such persons
-  disclaim all liability for others' actions and decisions in this regard.
+  project. The Maintainers disclaim all liability for others' actions and decisions
+  in this regard.
 
 12. This Code of Merit governs the technical procedures of the project not the 
 activities outside of it. 
