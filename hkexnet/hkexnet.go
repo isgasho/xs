@@ -78,6 +78,7 @@ type (
 		kex        KEXAlg      // KEX/KEM propsal (client -> server)
 		m          *sync.Mutex // (internal)
 		c          *net.Conn   // which also implements io.Reader, io.Writer, ...
+		immClose   bool
 		cipheropts uint32      // post-KEx cipher/hmac options
 		opts       uint32      // post-KEx protocol options (caller-defined)
 		WinCh      chan WinSize
@@ -128,6 +129,10 @@ func (hc Conn) GetStatus() CSOType {
 func (hc *Conn) SetStatus(stat CSOType) {
 	*hc.closeStat = stat
 	log.Println("closeStat:", *hc.closeStat)
+}
+
+func (hc *Conn) SetImmClose() {
+	hc.immClose = true
 }
 
 // ConnOpts returns the cipher/hmac options value, which is sent to the
@@ -532,8 +537,15 @@ func (hc *Conn) Close() (err error) {
 	s := make([]byte, 4)
 	binary.BigEndian.PutUint32(s, uint32(*hc.closeStat))
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
+	(*hc.c).SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
 	hc.WritePacket(s, CSOExitStatus)
-	err = (*hc.c).Close()
+	// This avoids a bug where server side may not get its last packet of
+	// data through to a client for non-interactive commands which exit
+	// immediately. Avoiding the immediate close lets the client close its
+	// side first.
+	if hc.immClose {
+		err = (*hc.c).Close()
+	}
 	logger.LogDebug(fmt.Sprintln("[Conn Closing]"))
 	return
 }
@@ -811,6 +823,7 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 					logger.LogDebug(fmt.Sprintln("[truncated payload, cannot determine CSOExitStatus]"))
 					hc.SetStatus(CSETruncCSO)
 				}
+				hc.SetImmClose() // clients can immediately close their end
 				hc.Close()
 			} else if ctrlStatOp == CSOTunSetup {
 				// server side tunnel setup in response to client
