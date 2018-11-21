@@ -1,4 +1,4 @@
-.PHONY: info clean common client server passwd subpkgs install uninstall
+.PHONY: vis clean common client server passwd subpkgs install uninstall
 
 SUBPKGS = logger spinsult hkexnet herradurakex
 TOOLS = hkexpasswd hkexsh hkexshd
@@ -49,6 +49,13 @@ endif
 passwd: common
 	$(MAKE) -C hkexpasswd
 
+vis:
+	@which go-code-visualizer >/dev/null 2>&1; \
+	stat=$$?; if [ $$stat -ne "0" ]; then \
+	  /bin/echo "go-code-visualizer not found. Run go get github.com/CodeHipster/go-code-visualizer to install."; \
+	else \
+	  go-code-visualizer . && dot -Tpng dot-visual.gv -o viz_hkexsh_dot.png; \
+	fi
 
 install:
 	cp hkexsh/hkexsh $(INSTPREFIX)/bin
