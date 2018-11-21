@@ -537,7 +537,7 @@ func (hc *Conn) Close() (err error) {
 	s := make([]byte, 4)
 	binary.BigEndian.PutUint32(s, uint32(*hc.closeStat))
 	log.Printf("** Writing closeStat %d at Close()\n", *hc.closeStat)
-	(*hc.c).SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
+	//(*hc.c).SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
 	hc.WritePacket(s, CSOExitStatus)
 	// This avoids a bug where server side may not get its last packet of
 	// data through to a client for non-interactive commands which exit

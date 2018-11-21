@@ -148,8 +148,12 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 			// Do a final read for remote's exit status
 			s := make([]byte, 4)
 			_, remErr := conn.Read(s)
-			if remErr != io.EOF && !strings.Contains(remErr.Error(), "use of closed network") {
+			if remErr != io.EOF &&
+				!strings.Contains(remErr.Error(), "use of closed network") &&
+				!strings.Contains(remErr.Error(), "connection reset by peer") {
 				fmt.Printf("*** remote status Read() failed: %v\n", remErr)
+			} else {
+				conn.SetStatus(0) // cp finished OK
 			}
 
 			// If local side status was OK, use remote side's status
@@ -206,7 +210,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 			if exitStatus == 0 {
 				exitStatus = uint32(conn.GetStatus())
 			}
-			fmt.Printf("*** server->client cp finished, status %d ***\n", conn.GetStatus())
+			log.Printf("*** server->client cp finished, status %d ***\n", conn.GetStatus())
 		}
 	}
 	return
