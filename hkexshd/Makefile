@@ -1,5 +1,6 @@
-.PHONY: clean all
+.PHONY: clean all vis
 
+EXTPKGS = binary,bytes,crypto,encoding,errors,flag,fmt,internal,io,log,net,os,path,runtime,time,strings,sync,syscall
 EXE = $(notdir $(shell pwd))
 
 all:
@@ -7,4 +8,7 @@ all:
 
 clean:
 	$(RM) $(EXE) $(EXE).exe
+
+vis:
+	go-callvis -skipbrowser -svg -output hkexshd-vis -ignore $(EXTPKGS) -group pkg,type .
 

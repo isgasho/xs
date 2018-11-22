@@ -50,11 +50,13 @@ passwd: common
 	$(MAKE) -C hkexpasswd
 
 vis:
-	@which go-code-visualizer >/dev/null 2>&1; \
+	@which go-callvis >/dev/null 2>&1; \
 	stat=$$?; if [ $$stat -ne "0" ]; then \
-	  /bin/echo "go-code-visualizer not found. Run go get github.com/CodeHipster/go-code-visualizer to install."; \
+	  /bin/echo "go-callvis not found. Run go get github.com/Russtopia/go-callvis to install."; \
 	else \
-	  go-code-visualizer . && dot -Tpng dot-visual.gv -o viz_hkexsh_dot.png; \
+	  make -C hkexsh vis;\
+	  make -C hkexshd vis;\
+	  make -C hkexpasswd vis; \
 	fi
 
 install:
