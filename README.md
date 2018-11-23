@@ -111,6 +111,7 @@ One-shot command
 * [B]$ cd hkexsh && ./hkexsh -x "ls /tmp" joebloggs@host-or-ip
 
 WARNING WARNING WARNING: the -d debug flag will echo passwords to the log/console!
+Logging on Linux usually goes to /var/log/syslog and/or /var/log/debug, /var/log/daemon.log.
 
 NOTE if running client (hkexsh) with -d, one will likely need to run 'reset' afterwards
 to fix up the shell tty afterwards, as stty echo may not be restored if client crashes
