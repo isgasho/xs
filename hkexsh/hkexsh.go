@@ -235,6 +235,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 	//Read remote end's stdout
 
 	wg.Add(1)
+	// #gv:s/label=\"doShellMode\$1\"/label=\"shellRemoteToStdin\"/
+	// .gv:doShellMode:1:shellRemoteToStdin
 	go func() {
 		defer wg.Done()
 		// By deferring a call to wg.Done(),
@@ -272,6 +274,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		// client writer (to server) goroutine
 		// Write local stdin to remote end
 		wg.Add(1)
+		// #gv:s/label=\"doShellMode\$2\"/label=\"shellStdinToRemote\"/
+		// .gv:doShellMode:2:shellStdinToRemote
 		go func() {
 			defer wg.Done()
 			//!defer wg.Done()
@@ -628,6 +632,8 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
+			// #gv:s/label=\"main\$1\"/label=\"deferRestore\"/
+			// .gv:main:1:deferRestore
 			defer func() { _ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 		} else {
 			log.Println("NOT A TTY")
@@ -669,12 +675,16 @@ func main() {
 		// Set up chaffing to server
 		conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 		if chaffEnabled {
+			// #gv:s/label=\"main\$2\"/label=\"deferCloseChaff\"/
+			// .gv:main:2:deferCloseChaff
 			conn.EnableChaff() // goroutine, returns immediately
 			defer conn.DisableChaff()
 			defer conn.ShutdownChaff()
 		}
 
 		// Keepalive for any tunnels that may exist
+		// #gv:s/label=\"main\$1\"/label=\"tunKeepAlive\"/
+		// .gv:main:1:tunKeepAlive
 		go func() {
 			for {
 				time.Sleep(time.Duration(2) * time.Second)
