@@ -36,13 +36,14 @@ import (
 )
 
 var (
-	wg  sync.WaitGroup
-	Log *logger.Writer // reg. syslog output (no -d)
+	wg sync.WaitGroup
+	// Log defaults to regular syslog output (no -d)
+	Log *logger.Writer
 )
 
-// Get terminal size using 'stty' command
+// GetSize gets the terminal size using 'stty' command
 func GetSize() (cols, rows int, err error) {
-	cmd := exec.Command("stty", "size")
+	cmd := exec.Command("stty", "size") // #nosec
 	cmd.Stdin = os.Stdin
 	out, err := cmd.Output()
 
@@ -50,13 +51,22 @@ func GetSize() (cols, rows int, err error) {
 		log.Println(err)
 		cols, rows = 80, 24 //failsafe
 	} else {
-		fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
+		n, err := fmt.Sscanf(string(out), "%d %d\n", &rows, &cols)
+		if n < 2 ||
+			rows < 0 ||
+			cols < 0 ||
+			rows > 9000 ||
+			cols > 9000 ||
+			err != nil {
+			log.Printf("GetSize error: rows:%d cols:%d; %v\n",
+				rows, cols, err)
+		}
 	}
 	return
 }
 
 // doCopyMode begins a secure hkexsh local<->remote file copy operation.
-func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.Session) (err error, exitStatus uint32) {
+func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.Session) (exitStatus uint32, err error) {
 	if remoteDest {
 		log.Println("local files:", files, "remote filepath:", string(rec.Cmd()))
 
@@ -82,7 +92,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 		// files and dirs in different trees to be deposited in a single
 		// remote destDir.
 		for _, v := range strings.Split(files, " ") {
-			v, _ = filepath.Abs(v)
+			v, _ = filepath.Abs(v) // #nosec
 			dirTmp, fileTmp := path.Split(v)
 			if dirTmp == "" {
 				cmdArgs = append(cmdArgs, fileTmp)
@@ -96,8 +106,8 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 		// When args are passed in exec() format, no quoting is required
 		// (as this isn't input from a shell) (right? -rlm 20180823)
 		//cmdArgs := []string{"-xvz", "-C", files, `--xform=s#.*/\(.*\)#\1#`}
-		c = exec.Command(cmdName, cmdArgs...)
-		c.Dir, _ = os.Getwd()
+		c = exec.Command(cmdName, cmdArgs...) // #nosec
+		c.Dir, _ = os.Getwd()                 // #nosec
 		log.Println("[wd:", c.Dir, "]")
 		c.Stdout = conn
 		stdErrBuffer := new(bytes.Buffer)
@@ -143,7 +153,10 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 			log.Println("Sending local exitStatus:", exitStatus)
 			r := make([]byte, 4)
 			binary.BigEndian.PutUint32(r, exitStatus)
-			conn.WritePacket(r, hkexnet.CSOExitStatus)
+			_, we := conn.WritePacket(r, hkexnet.CSOExitStatus)
+			if we != nil {
+				fmt.Println("Error:", we)
+			}
 
 			// Do a final read for remote's exit status
 			s := make([]byte, 4)
@@ -180,7 +193,7 @@ func doCopyMode(conn *hkexnet.Conn, remoteDest bool, files string, rec *hkexsh.S
 		// When args are passed in exec() format, no quoting is required
 		// (as this isn't input from a shell) (right? -rlm 20180823)
 		//cmdArgs := []string{"-xvz", "-C", destPath, `--xform=s#.*/\(.*\)#\1#`}
-		c = exec.Command(cmdName, cmdArgs...)
+		c = exec.Command(cmdName, cmdArgs...) // #nosec
 		c.Stdin = conn
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
@@ -232,7 +245,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		// exit with inerr == nil
 		_, inerr := io.Copy(os.Stdout, conn)
 		if inerr != nil {
-			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 			// Copy operations and user logging off will cause
 			// a "use of closed network connection" so handle that
 			// gracefully here
@@ -243,11 +256,11 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		}
 
 		rec.SetStatus(uint32(conn.GetStatus()))
-		log.Println("rec.status:", rec.Status)
+		log.Println("rec.status:", rec.Status())
 
 		if isInteractive {
 			log.Println("[* Got EOF *]")
-			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 		}
 	}()
 
@@ -273,7 +286,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			if outerr != nil {
 				log.Println(outerr)
 				fmt.Println(outerr)
-				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // Best effort.
+				_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 				log.Println("[Hanging up]")
 				os.Exit(0)
 			}
@@ -283,16 +296,15 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 	// Wait until both stdin and stdout goroutines finish before returning
 	// (ensure client gets all data from server before closing)
 	wg.Wait()
-	return
 }
 
-func UsageShell() {
+func usageShell() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "%s [opts] [user]@server\n", os.Args[0])
 	flag.PrintDefaults()
 }
 
-func UsageCp() {
+func usageCp() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "%s [opts] srcFileOrDir [...] [user]@server[:dstpath]\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "%s [opts] [user]@server[:srcFileOrDir] dstPath\n", os.Args[0])
@@ -310,10 +322,16 @@ func rejectUserMsg() string {
 func reqTunnel(hc *hkexnet.Conn, lp uint16, p string /*net.Addr*/, rp uint16) {
 	// Write request to server so it can attempt to set up its end
 	var bTmp bytes.Buffer
-	binary.Write(&bTmp, binary.BigEndian, lp)
-	binary.Write(&bTmp, binary.BigEndian, rp)
-	logger.LogDebug(fmt.Sprintln("[Client sending CSOTunSetup]"))
-	hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunSetup)
+	if e := binary.Write(&bTmp, binary.BigEndian, lp); e != nil {
+		fmt.Fprintln(os.Stderr, "reqTunnel:", e)
+	}
+	if e := binary.Write(&bTmp, binary.BigEndian, rp); e != nil {
+		fmt.Fprintln(os.Stderr, "reqTunnel:", e)
+	}
+	_ = logger.LogDebug(fmt.Sprintln("[Client sending CSOTunSetup]"))
+	if n, e := hc.WritePacket(bTmp.Bytes(), hkexnet.CSOTunSetup); e != nil || n != len(bTmp.Bytes()) {
+		fmt.Fprintln(os.Stderr, "reqTunnel:", e)
+	}
 
 	return
 }
@@ -374,6 +392,18 @@ func launchTuns(conn *hkexnet.Conn, remoteHost string, tuns string) {
 	}
 }
 
+func sendSessionParams(conn io.Writer /* *hkexnet.Conn*/, rec *hkexsh.Session) (e error) {
+	_, e = fmt.Fprintf(conn, "%d %d %d %d %d %d\n",
+		len(rec.Op()), len(rec.Who()), len(rec.ConnHost()), len(rec.TermType()), len(rec.Cmd()), len(rec.AuthCookie(true)))
+	_, e = conn.Write(rec.Op())
+	_, e = conn.Write(rec.Who())
+	_, e = conn.Write(rec.ConnHost())
+	_, e = conn.Write(rec.TermType())
+	_, e = conn.Write(rec.Cmd())
+	_, e = conn.Write(rec.AuthCookie(true))
+	return
+}
+
 // hkexsh - a client for secure shell and file copy operations.
 //
 // While conforming to the basic net.Conn interface HKex.Conn has extra
@@ -390,10 +420,10 @@ func main() {
 	var vopt bool
 	var gopt bool //login via password, asking server to generate authToken
 	var dbg bool
-	var shellMode bool // if true act as shell, else file copier
-	var cAlg string    //cipher alg
-	var hAlg string    //hmac alg
-	var kAlg string    //KEX/KEM alg
+	var shellMode bool   // if true act as shell, else file copier
+	var cipherAlg string //cipher alg
+	var hmacAlg string   //hmac alg
+	var kexAlg string    //KEX/KEM alg
 	var server string
 	var port uint
 	var cmdStr string
@@ -413,9 +443,9 @@ func main() {
 
 	flag.BoolVar(&vopt, "v", false, "show version")
 	flag.BoolVar(&dbg, "d", false, "debug logging")
-	flag.StringVar(&cAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\" | \"C_CRYPTMT1\"]")
-	flag.StringVar(&hAlg, "m", "H_SHA256", "`hmac` [\"H_SHA256\"]")
-	flag.StringVar(&kAlg, "k", "KEX_HERRADURA256", "`kex` [\"KEX_HERRADURA{256/512/1024/2048}\" | \"KEX_KYBER{512/768/1024}\"]")
+	flag.StringVar(&cipherAlg, "c", "C_AES_256", "`cipher` [\"C_AES_256\" | \"C_TWOFISH_128\" | \"C_BLOWFISH_64\" | \"C_CRYPTMT1\"]")
+	flag.StringVar(&hmacAlg, "m", "H_SHA256", "`hmac` [\"H_SHA256\"]")
+	flag.StringVar(&kexAlg, "k", "KEX_HERRADURA256", "`kex` [\"KEX_HERRADURA{256/512/1024/2048}\" | \"KEX_KYBER{512/768/1024}\"]")
 	flag.UintVar(&port, "p", 2000, "`port`")
 	//flag.StringVar(&authCookie, "a", "", "auth cookie")
 	flag.BoolVar(&chaffEnabled, "e", true, "enabled chaff pkts (default true)")
@@ -432,9 +462,9 @@ func main() {
 		flag.StringVar(&tunSpecStr, "T", "", "`tunnelspec` localPort:remotePort[,localPort:remotePort,...]")
 		flag.BoolVar(&gopt, "g", false, "ask server to generate authtoken")
 		shellMode = true
-		flag.Usage = UsageShell
+		flag.Usage = usageShell
 	} else {
-		flag.Usage = UsageCp
+		flag.Usage = usageCp
 	}
 	flag.Parse()
 
@@ -524,25 +554,16 @@ func main() {
 		u, _ := user.Current()
 		ab, aerr := ioutil.ReadFile(fmt.Sprintf("%s/.hkexsh_id", u.HomeDir))
 		if aerr == nil {
-			//authCookie = string(ab)
 			idx := strings.Index(string(ab), remoteHost)
-			//fmt.Printf("auth entry idx:%d\n", idx)
 			if idx >= 0 {
-				//fmt.Fprintln(os.Stderr, "[authtoken]")
 				ab = ab[idx:]
 				entries := strings.SplitN(string(ab), "\n", -1)
-				//if len(entries) > 0 {
-				//fmt.Println("entries[0]:", entries[0])
 				authCookie = strings.TrimSpace(entries[0])
-				//} else {
-				//	fmt.Fprintln(os.Stderr, "ERROR: no matching authtoken")
-				//	os.Exit(1)
-				//}
 				// Security scrub
 				ab = nil
 				runtime.GC()
 			} else {
-				fmt.Fprintln(os.Stderr, "[no authtoken, use -g to request one from server]")
+				_, _ = fmt.Fprintln(os.Stderr, "[no authtoken, use -g to request one from server]")
 			}
 		} else {
 			log.Printf("[cannot read %s/.hkexsh_id]\n", u.HomeDir)
@@ -589,7 +610,7 @@ func main() {
 		}
 	}
 
-	conn, err := hkexnet.Dial("tcp", server, cAlg, hAlg, kAlg)
+	conn, err := hkexnet.Dial("tcp", server, cipherAlg, hmacAlg, kexAlg)
 	if err != nil {
 		fmt.Println(err)
 		panic(err)
@@ -616,27 +637,19 @@ func main() {
 	if len(authCookie) == 0 {
 		//No auth token, prompt for password
 		fmt.Printf("Gimme cookie:")
-		ab, err := hkexsh.ReadPassword(int(os.Stdin.Fd()))
+		ab, e := hkexsh.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Printf("\r\n")
-		if err != nil {
-			panic(err)
+		if e != nil {
+			panic(e)
 		}
 		authCookie = string(ab)
-		// Security scrub
-		ab = nil
-		runtime.GC()
 	}
+	// Security scrub
+	runtime.GC()
 
 	// Set up session params and send over to server
 	rec := hkexsh.NewSession(op, []byte(uname), []byte(remoteHost), []byte(os.Getenv("TERM")), []byte(cmdStr), []byte(authCookie), 0)
-	_, err = fmt.Fprintf(conn, "%d %d %d %d %d %d\n",
-		len(rec.Op()), len(rec.Who()), len(rec.ConnHost()), len(rec.TermType()), len(rec.Cmd()), len(rec.AuthCookie(true)))
-	_, err = conn.Write(rec.Op())
-	_, err = conn.Write(rec.Who())
-	_, err = conn.Write(rec.ConnHost())
-	_, err = conn.Write(rec.TermType())
-	_, err = conn.Write(rec.Cmd())
-	_, err = conn.Write(rec.AuthCookie(true))
+	sendSessionParams(&conn, rec)
 
 	//Security scrub
 	authCookie = ""
@@ -645,7 +658,10 @@ func main() {
 	// Read auth reply from server
 	authReply := make([]byte, 1) // bool: 0 = fail, 1 = pass
 	_, err = conn.Read(authReply)
-	if authReply[0] == 0 {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error reading auth reply")
+		rec.SetStatus(255)
+	} else if authReply[0] == 0 {
 		fmt.Fprintln(os.Stderr, rejectUserMsg())
 		rec.SetStatus(255)
 	} else {
@@ -671,7 +687,7 @@ func main() {
 
 			doShellMode(isInteractive, &conn, oldState, rec)
 		} else { // copyMode
-			_, s := doCopyMode(&conn, pathIsDest, fileArgs, rec)
+			s, _ := doCopyMode(&conn, pathIsDest, fileArgs, rec)
 			rec.SetStatus(s)
 		}
 
