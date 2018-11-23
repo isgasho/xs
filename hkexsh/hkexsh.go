@@ -236,8 +236,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 
 	wg.Add(1)
 	// #gv:s/label=\"doShellMode\$1\"/label=\"shellRemoteToStdin\"/
-	// .gv:doShellMode:1:shellRemoteToStdin
-	go func() {
+	// TODO:.gv:doShellMode:1:shellRemoteToStdin
+	shellRemoteToStdout := func() {
 		defer wg.Done()
 		// By deferring a call to wg.Done(),
 		// each goroutine guarantees that it marks
@@ -264,7 +264,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			log.Println("[* Got EOF *]")
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 		}
-	}()
+	}
+	go shellRemoteToStdout()
 
 	// Only look for data from stdin to send to remote end
 	// for interactive sessions.
@@ -275,8 +276,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		// Write local stdin to remote end
 		wg.Add(1)
 		// #gv:s/label=\"doShellMode\$2\"/label=\"shellStdinToRemote\"/
-		// .gv:doShellMode:2:shellStdinToRemote
-		go func() {
+		// TODO:.gv:doShellMode:2:shellStdinToRemote
+		shellStdinToRemote := func() {
 			defer wg.Done()
 			//!defer wg.Done()
 			// Copy() expects EOF so this will
@@ -294,7 +295,8 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 				log.Println("[Hanging up]")
 				os.Exit(0)
 			}
-		}()
+		}
+		go shellStdinToRemote()
 	}
 
 	// Wait until both stdin and stdout goroutines finish before returning
@@ -633,7 +635,7 @@ func main() {
 				panic(err)
 			}
 			// #gv:s/label=\"main\$1\"/label=\"deferRestore\"/
-			// .gv:main:1:deferRestore
+			// TODO:.gv:main:1:deferRestore
 			defer func() { _ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 		} else {
 			log.Println("NOT A TTY")
@@ -676,7 +678,7 @@ func main() {
 		conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 		if chaffEnabled {
 			// #gv:s/label=\"main\$2\"/label=\"deferCloseChaff\"/
-			// .gv:main:2:deferCloseChaff
+			// TODO:.gv:main:2:deferCloseChaff
 			conn.EnableChaff() // goroutine, returns immediately
 			defer conn.DisableChaff()
 			defer conn.ShutdownChaff()
@@ -684,13 +686,14 @@ func main() {
 
 		// Keepalive for any tunnels that may exist
 		// #gv:s/label=\"main\$1\"/label=\"tunKeepAlive\"/
-		// .gv:main:1:tunKeepAlive
-		go func() {
+		// TODO:.gv:main:1:tunKeepAlive
+		keepAliveWorker := func() {
 			for {
 				time.Sleep(time.Duration(2) * time.Second)
 				conn.WritePacket([]byte{0, 0}, hkexnet.CSOTunKeepAlive)
 			}
-		}()
+		}
+		go keepAliveWorker()
 
 		if shellMode {
 			launchTuns(&conn, remoteHost, tunSpecStr)
