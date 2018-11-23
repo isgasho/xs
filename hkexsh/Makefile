@@ -10,6 +10,6 @@ clean:
 	$(RM) $(EXE) $(EXE).exe
 
 vis:
-	go-callvis -skipbrowser -svg -output hkexsh-vis -ignore $(EXTPKGS) -group pkg,type .
+	go-callvis -skipbrowser -svg -png -output hkexsh-vis -ignore $(EXTPKGS) -group pkg,type .
 
 
