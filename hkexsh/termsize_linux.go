@@ -17,6 +17,7 @@ func handleTermResizes(conn *hkexnet.Conn) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
 	wg.Add(1)
+	// #gv:s/label=\"handleTermResizes\$1\"/label=\"resizeHandler\"/
 	go func() {
 		defer wg.Done()
 
