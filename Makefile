@@ -1,4 +1,4 @@
-.PHONY: vis clean common client server passwd subpkgs install uninstall
+.PHONY: lint vis clean common client server passwd subpkgs install uninstall reinstall
 
 SUBPKGS = logger spinsult hkexnet herradurakex
 TOOLS = hkexpasswd hkexsh hkexshd
@@ -58,6 +58,13 @@ vis:
 	  make -C hkexshd vis;\
 	  make -C hkexpasswd vis; \
 	fi
+
+lint:
+	make -C hkexpasswd lint
+	make -C hkexshd lint
+	make -C hkexsh lint
+
+reinstall: uninstall install
 
 install:
 	cp hkexsh/hkexsh $(INSTPREFIX)/bin

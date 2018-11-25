@@ -1,4 +1,4 @@
-.PHONY: clean all vis
+.PHONY: clean all vis lint
 
 EXTPKGS = binary,bytes,crypto,encoding,errors,flag,fmt,internal,io,log,net,os,path,runtime,time,strings,sync,syscall
 EXE = $(notdir $(shell pwd))
@@ -11,4 +11,7 @@ clean:
 
 vis:
 	go-callvis -skipbrowser -png -svg -output hkexshd-vis -ignore $(EXTPKGS) -group pkg,type .
+
+lint:
+	-gometalinter --deadline=60s | sort
 

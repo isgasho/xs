@@ -1,17 +1,20 @@
 // +build linux
-//
-// Wrapper around UNIX syslog, so that it also may be wrapped
-// with something else for Windows (Sadly, the stdlib log/syslog
-// is frozen, and there is no Window implementation.)
+
+// Package logger is a wrapper around UNIX syslog, so that it also may
+// be wrapped with something else for Windows (Sadly, the stdlib log/syslog
+// is frozen, and there is no Windows implementation.)
 package logger
 
 import (
 	sl "log/syslog"
 )
 
+// Priority is the logger priority
 type Priority = sl.Priority
+// Writer is a syslog Writer
 type Writer = sl.Writer
 
+// nolint: golint
 const (
 	// Severity.
 
@@ -27,6 +30,7 @@ const (
 	LOG_DEBUG
 )
 
+// nolint: golint
 const (
 	// Facility.
 
@@ -62,39 +66,59 @@ var (
 	l *sl.Writer
 )
 
+// New returns a new log Writer.
 func New(flags Priority, tag string) (w *Writer, e error) {
-	w, e = sl.New(sl.Priority(flags), tag)
+	w, e = sl.New(flags, tag)
 	l = w
 	return w, e
 }
 
+// Alert returns a log Alert error
 func Alert(s string) error {
 		return l.Alert(s)
 }
+
+// LogClose closes the log Writer.
 func LogClose() error {
 		return l.Close()
 }
+
+// LogCrit returns a log Alert error
 func LogCrit(s string) error {
 		return l.Crit(s)
 }
+
+// LogDebug returns a log Debug error
 func LogDebug(s string) error {
 		return l.Debug(s)
 }
+
+// LogEmerg returns a log Emerg error
 func LogEmerg(s string) error {
 		return l.Emerg(s)
 }
+
+// LogErr returns a log Err error
 func LogErr(s string) error {
 		return l.Err(s)
 }
+
+// LogInfo returns a log Info error
 func LogInfo(s string) error {
 		return l.Info(s)
 }
+
+// LogNotice returns a log Notice error
 func LogNotice(s string) error {
 		return l.Notice(s)
 }
+
+// LogWarning returns a log Warning error
 func LogWarning(s string) error {
 		return l.Warning(s)
 }
+
+// LogWrite writes to the logger at default level
 func LogWrite(b []byte) (int, error) {
 		return l.Write(b)
 }
