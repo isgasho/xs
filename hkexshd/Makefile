@@ -10,5 +10,6 @@ clean:
 	$(RM) $(EXE) $(EXE).exe
 
 vis:
-	go-callvis -skipbrowser -png -svg -output hkexshd-vis -ignore $(EXTPKGS) -group pkg,type .
+	go-callvis -skipbrowser -output hkexshd-vis -ignore $(EXTPKGS) -group pkg,type .
+	../fixup-gv.sh hkexshd.go && cat hkexshd-vis.gv | dot -Tpng -ohkexshd-vis.gv.png
 

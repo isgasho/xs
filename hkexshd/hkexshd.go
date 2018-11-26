@@ -267,14 +267,15 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		return err, hkexnet.CSEPtyExecFail
 	}
 	// Make sure to close the pty at the end.
+	// #gv:s/label=\"runShellAs\$1\"/label=\"deferPtmxClose\"/
 	defer func() { _ = ptmx.Close() }() // Best effort.
 
 	log.Printf("[%s]\n", cmd)
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
 	} else {
-
 		// Watch for term resizes
+		// #gv:s/label=\"runShellAs\$2\"/label=\"termResizeWatcher\"/
 		go func() {
 			for sz := range conn.WinCh {
 				log.Printf("[Setting term size to: %v %v]\n", sz.Rows, sz.Cols)
@@ -284,6 +285,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		}()
 
 		// Copy stdin to the pty.. (bgnd goroutine)
+		// #gv:s/label=\"runShellAs\$3\"/label=\"stdinToPtyWorker\"/
 		go func() {
 			_, e := io.Copy(ptmx, conn)
 			if e != nil {
@@ -296,8 +298,12 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		if chaffing {
 			conn.EnableChaff()
 		}
-		defer conn.DisableChaff()
-		defer conn.ShutdownChaff()
+		// #gv:s/label=\"runShellAs\$4\"/label=\"deferChaffShutdown\"/
+		defer func() {
+				conn.DisableChaff()
+				conn.ShutdownChaff()
+		}()
+		
 
 		// ..and the pty to stdout.
 		// This may take some time exceeding that of the
@@ -306,6 +312,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		// to ensure all stdout data gets to the client before
 		// connection is closed.
 		wg.Add(1)
+		// #gv:s/label=\"runShellAs\$2\"/label=\"ptyToStdoutWorker\"/
 		go func() {
 			defer wg.Done()
 			_, e := io.Copy(conn, ptmx)
