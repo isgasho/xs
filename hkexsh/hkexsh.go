@@ -238,7 +238,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 	wg.Add(1)
 	// #gv:s/label=\"doShellMode\$1\"/label=\"shellRemoteToStdin\"/
 	// TODO:.gv:doShellMode:1:shellRemoteToStdin
-	shellRemoteToStdout := func() {
+	shellRemoteToStdin := func() {
 		defer wg.Done()
 		// By deferring a call to wg.Done(),
 		// each goroutine guarantees that it marks
@@ -266,7 +266,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 		}
 	}
-	go shellRemoteToStdout()
+	go shellRemoteToStdin()
 
 	// Only look for data from stdin to send to remote end
 	// for interactive sessions.
