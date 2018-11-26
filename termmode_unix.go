@@ -20,6 +20,7 @@ const ioctlReadTermios = unix.TCGETS
 const ioctlWriteTermios = unix.TCSETS
 
 // From github.com/golang/crypto/blob/master/ssh/terminal/util.go
+
 // State contains the state of a terminal.
 type State struct {
 	termios unix.Termios
@@ -87,7 +88,7 @@ func ReadPassword(fd int) ([]byte, error) {
 	}
 
 	defer func() {
-		unix.IoctlSetTermios(fd, ioctlWriteTermios, termios)
+		_ = unix.IoctlSetTermios(fd, ioctlWriteTermios, termios) // nolint: gosec
 	}()
 
 	return readPasswordLine(passwordReader(fd))

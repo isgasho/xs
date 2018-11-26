@@ -21,6 +21,7 @@ import (
 	"github.com/jameskeane/bcrypt"
 )
 
+// nolint: gocyclo
 func main() {
 	var pfName string
 	var newpw string
@@ -84,7 +85,7 @@ func main() {
 	}
 	//fmt.Println("Salt:", salt, "Hash:", hash)
 
-	b, err := ioutil.ReadFile(pfName)
+	b, err := ioutil.ReadFile(pfName) // nolint: gosec
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func main() {
 	}
 
 	recFound := false
-	for i, _ := range records {
+	for i := range records {
 		//fmt.Println(records[i])
 		if records[i][0] == uname {
 			recFound = true
@@ -124,8 +125,14 @@ func main() {
 	w := csv.NewWriter(outFile)
 	w.Comma = ':'
 	//w.FieldsPerRecord = 4 // username:salt:authCookie:disallowedCmdList (a,b,...)
-	w.Write([]string{"#username", "salt", "authCookie"/*, "disallowedCmdList"*/})
-	w.WriteAll(records)
+	err = w.Write([]string{"#username", "salt", "authCookie" /*, "disallowedCmdList"*/})
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = w.WriteAll(records)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err = w.Error(); err != nil {
 		log.Fatal(err)
 	}

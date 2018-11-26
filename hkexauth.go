@@ -24,15 +24,15 @@ import (
 
 func userExistsOnSystem(who string) bool {
 	_, userErr := user.Lookup(who)
-	if userErr != nil {
-		return false
-	} else {
-		return true
-	}
+	return userErr == nil
 }
 
+// AuthUserByPasswd checks user login information using a password.
+// This checks /etc/hkexsh.passwd for auth info, and system /etc/passwd
+// to cross-check the user actually exists.
+// nolint: gocyclo
 func AuthUserByPasswd(username string, auth string, fname string) (valid bool, allowedCmds string) {
-	b, e := ioutil.ReadFile(fname)
+	b, e := ioutil.ReadFile(fname) // nolint: gosec
 	if e != nil {
 		valid = false
 		log.Println("ERROR: Cannot read hkexsh.passwd file!")
@@ -60,7 +60,10 @@ func AuthUserByPasswd(username string, auth string, fname string) (valid bool, a
 		}
 
 		if username == record[0] {
-			tmp, _ := bcrypt.Hash(auth, record[1])
+			tmp, err := bcrypt.Hash(auth, record[1])
+			if err != nil {
+				break
+			}
 			if tmp == record[2] && username != "$nosuchuser$" {
 				valid = true
 			}
@@ -71,7 +74,6 @@ func AuthUserByPasswd(username string, auth string, fname string) (valid bool, a
 	for i := range b {
 		b[i] = 0
 	}
-	b = nil
 	r = nil
 	runtime.GC()
 
@@ -81,6 +83,11 @@ func AuthUserByPasswd(username string, auth string, fname string) (valid bool, a
 	return
 }
 
+// AuthUserByToken checks user login information against an auth token.
+// Auth tokens are stored in each user's $HOME/.hkexsh_id and are requested
+// via the -g option.
+// The function also check system /etc/passwd to cross-check the user
+// actually exists.
 func AuthUserByToken(username string, connhostname string, auth string) (valid bool) {
 	auth = strings.TrimSpace(auth)
 	u, ue := user.Lookup(username)
@@ -111,7 +118,8 @@ func AuthUserByToken(username string, connhostname string, auth string) (valid b
 
 		if (connhostname == record[0]) &&
 			(auth == strings.Join([]string{record[0], record[1]}, ":")) {
-			return true
+			valid = true
+			break
 		}
 	}
 	if !userExistsOnSystem(username) {

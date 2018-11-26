@@ -30,7 +30,7 @@ func handleTermResizes(conn *hkexnet.Conn) {
 				log.Println(err)
 			}
 			termSzPacket := fmt.Sprintf("%d %d", rows, cols)
-			conn.WritePacket([]byte(termSzPacket), hkexnet.CSOTermSize)
+			conn.WritePacket([]byte(termSzPacket), hkexnet.CSOTermSize) // nolint: errcheck,gosec
 		}
 	}()
 	ch <- syscall.SIGWINCH // Initial resize.

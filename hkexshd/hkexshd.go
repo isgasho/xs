@@ -34,16 +34,17 @@ import (
 )
 
 var (
-	Log *logger.Writer // reg. syslog output (no -d)
+	// Log - syslog output (with no -d)
+	Log *logger.Writer
 )
 
 /* -------------------------------------------------------------- */
 // Perform a client->server copy
-func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string, chaffing bool) (err error, exitStatus uint32) {
-	u, _ := user.Lookup(who)
+func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string, chaffing bool) (exitStatus uint32, err error) {
+	u, _ := user.Lookup(who) // nolint: gosec
 	var uid, gid uint32
-	fmt.Sscanf(u.Uid, "%d", &uid)
-	fmt.Sscanf(u.Gid, "%d", &gid)
+	fmt.Sscanf(u.Uid, "%d", &uid) // nolint: gosec,errcheck
+	fmt.Sscanf(u.Gid, "%d", &gid) // nolint: gosec,errcheck
 	log.Println("uid:", uid, "gid:", gid)
 
 	// Need to clear server's env and set key vars of the
@@ -54,9 +55,9 @@ func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string
 	// of client shell window used to run client.
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
-	os.Setenv("HOME", u.HomeDir)
-	os.Setenv("TERM", ttype)
-	os.Setenv("HKEXSH", "1")
+	os.Setenv("HOME", u.HomeDir) // nolint: gosec,errcheck
+	os.Setenv("TERM", ttype) // nolint: gosec,errcheck
+	os.Setenv("HKEXSH", "1") // nolint: gosec,errcheck
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -74,7 +75,7 @@ func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string
 	// When args are passed in exec() format, no quoting is required
 	// (as this isn't input from a shell) (right? -rlm 20180823)
 	//cmdArgs := []string{"-x", "-C", destDir, `--xform=s#.*/\(.*\)#\1#`}
-	c = exec.Command(cmdName, cmdArgs...)
+	c = exec.Command(cmdName, cmdArgs...) // nolint: gosec
 
 	c.Dir = destDir
 
@@ -128,7 +129,7 @@ func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string
 				// an ExitStatus() method with the same signature.
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 					exitStatus = uint32(status.ExitStatus())
-					err = errors.New("cmd returned nonzero status")
+					//err = errors.New("cmd returned nonzero status")
 					log.Printf("Exit Status: %d\n", exitStatus)
 				}
 			}
@@ -139,11 +140,15 @@ func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string
 }
 
 // Perform a server->client copy
-func runServerToClientCopyAs(who, ttype string, conn *hkexnet.Conn, srcPath string, chaffing bool) (err error, exitStatus uint32) {
-	u, _ := user.Lookup(who)
+func runServerToClientCopyAs(who, ttype string, conn *hkexnet.Conn, srcPath string, chaffing bool) (exitStatus uint32, err error) {
+	u, err := user.Lookup(who)
+	if err != nil {
+		exitStatus = 1
+		return
+	}
 	var uid, gid uint32
-	fmt.Sscanf(u.Uid, "%d", &uid)
-	fmt.Sscanf(u.Gid, "%d", &gid)
+	_, _ = fmt.Sscanf(u.Uid, "%d", &uid) // nolint: gosec
+	_, _ = fmt.Sscanf(u.Gid, "%d", &gid) // nolint: gosec
 	log.Println("uid:", uid, "gid:", gid)
 
 	// Need to clear server's env and set key vars of the
@@ -154,9 +159,9 @@ func runServerToClientCopyAs(who, ttype string, conn *hkexnet.Conn, srcPath stri
 	// of client shell window used to run client.
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
-	os.Setenv("HOME", u.HomeDir)
-	os.Setenv("TERM", ttype)
-	os.Setenv("HKEXSH", "1")
+	_ = os.Setenv("HOME", u.HomeDir) // nolint: gosec
+	_ = os.Setenv("TERM", ttype)     // nolint: gosec
+	_ = os.Setenv("HKEXSH", "1")     // nolint: gosec
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -167,7 +172,7 @@ func runServerToClientCopyAs(who, ttype string, conn *hkexnet.Conn, srcPath stri
 	srcDir, srcBase := path.Split(srcPath)
 	cmdArgs := []string{"-cz", "-C", srcDir, "-f", "-", srcBase}
 
-	c = exec.Command(cmdName, cmdArgs...)
+	c = exec.Command(cmdName, cmdArgs...) // nolint: gosec
 
 	//If os.Clearenv() isn't called by server above these will be seen in the
 	//client's session env.
@@ -197,40 +202,44 @@ func runServerToClientCopyAs(who, ttype string, conn *hkexnet.Conn, srcPath stri
 	err = c.Start() // returns immediately
 	if err != nil {
 		log.Printf("Command finished with error: %v", err)
-		return err, hkexnet.CSEExecFail // !?
-	} else {
-		if err := c.Wait(); err != nil {
-			//fmt.Println("*** c.Wait() done ***")
-			if exiterr, ok := err.(*exec.ExitError); ok {
-				// The program has exited with an exit code != 0
+		return hkexnet.CSEExecFail, err // !?
+	}
+	if err := c.Wait(); err != nil {
+		//fmt.Println("*** c.Wait() done ***")
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			// The program has exited with an exit code != 0
 
-				// This works on both Unix and Windows. Although package
-				// syscall is generally platform dependent, WaitStatus is
-				// defined for both Unix and Windows and in both cases has
-				// an ExitStatus() method with the same signature.
-				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-					exitStatus = uint32(status.ExitStatus())
-					if len(stdErrBuffer.Bytes()) > 0 {
-						log.Print(stdErrBuffer)
-					}
-					log.Printf("Exit Status: %d", exitStatus)
+			// This works on both Unix and Windows. Although package
+			// syscall is generally platform dependent, WaitStatus is
+			// defined for both Unix and Windows and in both cases has
+			// an ExitStatus() method with the same signature.
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				exitStatus = uint32(status.ExitStatus())
+				if len(stdErrBuffer.Bytes()) > 0 {
+					log.Print(stdErrBuffer)
 				}
+				log.Printf("Exit Status: %d", exitStatus)
 			}
 		}
-		//fmt.Println("*** server->client cp finished ***")
-		return
 	}
+	//fmt.Println("*** server->client cp finished ***")
+	return
 }
 
 // Run a command (via default shell) as a specific user
 //
 // Uses ptys to support commands which expect a terminal.
-func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.Conn, chaffing bool) (err error, exitStatus uint32) {
+// nolint: gocyclo
+func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.Conn, chaffing bool) (exitStatus uint32, err error) {
 	var wg sync.WaitGroup
-	u, _ := user.Lookup(who)
+	u, err := user.Lookup(who)
+	if err != nil {
+		exitStatus = 1
+		return
+	}
 	var uid, gid uint32
-	fmt.Sscanf(u.Uid, "%d", &uid)
-	fmt.Sscanf(u.Gid, "%d", &gid)
+	_, _ = fmt.Sscanf(u.Uid, "%d", &uid) // nolint: gosec
+	_, _ = fmt.Sscanf(u.Gid, "%d", &gid) // nolint: gosec
 	log.Println("uid:", uid, "gid:", gid)
 
 	// Need to clear server's env and set key vars of the
@@ -241,15 +250,15 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 	// of client shell window used to run client.
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
-	os.Setenv("HOME", u.HomeDir)
-	os.Setenv("TERM", ttype)
-	os.Setenv("HKEXSH", "1")
+	_ = os.Setenv("HOME", u.HomeDir) // nolint: gosec
+	_ = os.Setenv("TERM", ttype)     // nolint: gosec
+	_ = os.Setenv("HKEXSH", "1")     // nolint: gosec
 
 	var c *exec.Cmd
 	if interactive {
-		c = exec.Command("/bin/bash", "-i", "-l")
+		c = exec.Command("/bin/bash", "-i", "-l") // nolint: gosec
 	} else {
-		c = exec.Command("/bin/bash", "-c", cmd)
+		c = exec.Command("/bin/bash", "-c", cmd) // nolint: gosec
 	}
 	//If os.Clearenv() isn't called by server above these will be seen in the
 	//client's session env.
@@ -264,11 +273,11 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 	// Start the command with a pty.
 	ptmx, err := pty.Start(c) // returns immediately with ptmx file
 	if err != nil {
-		return err, hkexnet.CSEPtyExecFail
+		return hkexnet.CSEPtyExecFail, err
 	}
 	// Make sure to close the pty at the end.
 	// #gv:s/label=\"runShellAs\$1\"/label=\"deferPtmxClose\"/
-	defer func() { _ = ptmx.Close() }() // Best effort.
+	defer func() { _ = ptmx.Close() }() // nolint: gosec
 
 	log.Printf("[%s]\n", cmd)
 	if err != nil {
@@ -279,7 +288,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		go func() {
 			for sz := range conn.WinCh {
 				log.Printf("[Setting term size to: %v %v]\n", sz.Rows, sz.Cols)
-				pty.Setsize(ptmx, &pty.Winsize{Rows: sz.Rows, Cols: sz.Cols})
+				pty.Setsize(ptmx, &pty.Winsize{Rows: sz.Rows, Cols: sz.Cols}) // nolint: gosec,errcheck
 			}
 			log.Println("*** WinCh goroutine done ***")
 		}()
@@ -346,6 +355,8 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 	return
 }
 
+// GenAuthToken generates a pseudorandom auth token for a specific
+// user from a specific host to allow non-interactive logins.
 func GenAuthToken(who string, connhost string) string {
 	//tokenA, e := os.Hostname()
 	//if e != nil {
@@ -354,7 +365,7 @@ func GenAuthToken(who string, connhost string) string {
 	tokenA := connhost
 
 	tokenB := make([]byte, 64)
-	_, _ = rand.Read(tokenB)
+	_, _ = rand.Read(tokenB) // nolint: gosec
 	return fmt.Sprintf("%s:%s", tokenA, hex.EncodeToString(tokenB))
 }
 
@@ -363,6 +374,7 @@ func GenAuthToken(who string, connhost string) string {
 // server code, save for declaring 'hkex' rather than 'net'
 // Listener and Conns. The KEx and encrypt/decrypt is done within the type.
 // Compare to 'serverp.go' in this directory to see the equivalence.
+// TODO: reduce gocyclo
 func main() {
 	version := hkexsh.Version
 
@@ -395,7 +407,7 @@ func main() {
 		}
 	}
 
-	Log, _ = logger.New(logger.LOG_DAEMON|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR, "hkexshd")
+	Log, _ = logger.New(logger.LOG_DAEMON|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR, "hkexshd") // nolint: gosec
 	hkexnet.Init(dbg, "hkexshd", logger.LOG_DAEMON|logger.LOG_DEBUG|logger.LOG_NOTICE|logger.LOG_ERR)
 	if dbg {
 		log.SetOutput(Log)
@@ -411,17 +423,17 @@ func main() {
 			sig := <-exitCh
 			switch sig.String() {
 			case "terminated":
-				logger.LogNotice(fmt.Sprintf("[Got signal: %s]", sig))
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s]", sig)) // nolint: gosec,errcheck
 				signal.Reset()
-				syscall.Kill(0, syscall.SIGTERM)
+				syscall.Kill(0, syscall.SIGTERM) // nolint: gosec,errcheck
 			case "interrupt":
-				logger.LogNotice(fmt.Sprintf("[Got signal: %s]", sig))
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s]", sig)) // nolint: gosec,errcheck
 				signal.Reset()
-				syscall.Kill(0, syscall.SIGINT)
+				syscall.Kill(0, syscall.SIGINT) // nolint: gosec,errcheck
 			case "hangup":
-				logger.LogNotice(fmt.Sprintf("[Got signal: %s - nop]", sig))
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s - nop]", sig)) // nolint:gosec,errcheck
 			default:
-				logger.LogNotice(fmt.Sprintf("[Got signal: %s - ignored]", sig))
+				logger.LogNotice(fmt.Sprintf("[Got signal: %s - ignored]", sig)) // nolint: gosec,errcheck
 			}
 		}
 	}()
@@ -432,7 +444,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer l.Close()
+	defer l.Close() // nolint: errcheck
 
 	log.Println("Serving on", laddr)
 	for {
@@ -452,7 +464,7 @@ func main() {
 			// The loop then returns to accepting, so that
 			// multiple connections may be served concurrently.
 			go func(hc *hkexnet.Conn) (e error) {
-				defer hc.Close()
+				defer hc.Close() // nolint: errcheck
 
 				//We use io.ReadFull() here to guarantee we consume
 				//just the data we want for the hkexsh.Session, and no more.
@@ -469,7 +481,7 @@ func main() {
 					return err
 				}
 
-				tmp := make([]byte, len1, len1)
+				tmp := make([]byte, len1)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.Op]")
@@ -477,7 +489,7 @@ func main() {
 				}
 				rec.SetOp(tmp)
 
-				tmp = make([]byte, len2, len2)
+				tmp = make([]byte, len2)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.Who]")
@@ -485,7 +497,7 @@ func main() {
 				}
 				rec.SetWho(tmp)
 
-				tmp = make([]byte, len3, len3)
+				tmp = make([]byte, len3)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.ConnHost]")
@@ -493,7 +505,7 @@ func main() {
 				}
 				rec.SetConnHost(tmp)
 
-				tmp = make([]byte, len4, len4)
+				tmp = make([]byte, len4)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.TermType]")
@@ -501,7 +513,7 @@ func main() {
 				}
 				rec.SetTermType(tmp)
 
-				tmp = make([]byte, len5, len5)
+				tmp = make([]byte, len5)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.Cmd]")
@@ -509,7 +521,7 @@ func main() {
 				}
 				rec.SetCmd(tmp)
 
-				tmp = make([]byte, len6, len6)
+				tmp = make([]byte, len6)
 				_, err = io.ReadFull(hc, tmp)
 				if err != nil {
 					log.Println("[Bad hkexsh.Session.AuthCookie]")
@@ -533,10 +545,10 @@ func main() {
 
 				// Tell client if auth was valid
 				if valid {
-					hc.Write([]byte{1})
+					hc.Write([]byte{1}) // nolint: gosec,errcheck
 				} else {
-					logger.LogNotice(fmt.Sprintln("Invalid user", string(rec.Who())))
-					hc.Write([]byte{0}) // ? required?
+					logger.LogNotice(fmt.Sprintln("Invalid user", string(rec.Who()))) // nolint: errcheck,gosec
+					hc.Write([]byte{0}) // nolint: gosec,errcheck
 					return
 				}
 
@@ -546,15 +558,15 @@ func main() {
 					// Generate automated login token
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					logger.LogNotice(fmt.Sprintf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Generating autologin token for [%s@%s]]\n", rec.Who(), hname)) // nolint: gosec,errcheck
 					token := GenAuthToken(string(rec.Who()), string(rec.ConnHost()))
 					tokenCmd := fmt.Sprintf("echo \"%s\" | tee -a ~/.hkexsh_id", token)
-					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), tokenCmd, false, hc, chaffEnabled)
+					cmdStatus, runErr := runShellAs(string(rec.Who()), string(rec.TermType()), tokenCmd, false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						logger.LogErr(fmt.Sprintf("[Error generating autologin token for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error generating autologin token for %s@%s]\n", rec.Who(), hname)) // nolint: gosec,errcheck
 					} else {
 						log.Printf("[Autologin token generation completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)
 						hc.SetStatus(hkexnet.CSOType(cmdStatus))
@@ -563,34 +575,34 @@ func main() {
 					// Non-interactive command
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					logger.LogNotice(fmt.Sprintf("[Running command for [%s@%s]]\n", rec.Who(), hname))
-					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), false, hc, chaffEnabled)
+					logger.LogNotice(fmt.Sprintf("[Running command for [%s@%s]]\n", rec.Who(), hname)) // nolint: gosec,errcheck
+					cmdStatus, runErr := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), false, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						logger.LogErr(fmt.Sprintf("[Error spawning cmd for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error spawning cmd for %s@%s]\n", rec.Who(), hname)) // nolint: gosec,errcheck
 					} else {
-						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)) // nolint: gosec,errcheck
 						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 's' {
 					// Interactive session
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					logger.LogNotice(fmt.Sprintf("[Running shell for [%s@%s]]\n", rec.Who(), hname))
+					logger.LogNotice(fmt.Sprintf("[Running shell for [%s@%s]]\n", rec.Who(), hname)) // nolint: gosec,errcheck
 
 					utmpx := goutmp.Put_utmp(string(rec.Who()), hname)
 					defer func() { goutmp.Unput_utmp(utmpx) }()
 					goutmp.Put_lastlog_entry("hkexsh", string(rec.Who()), hname)
-					runErr, cmdStatus := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), true, hc, chaffEnabled)
+					cmdStatus, runErr := runShellAs(string(rec.Who()), string(rec.TermType()), string(rec.Cmd()), true, hc, chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						Log.Err(fmt.Sprintf("[Error spawning shell for %s@%s]\n", rec.Who(), hname))
+						Log.Err(fmt.Sprintf("[Error spawning shell for %s@%s]\n", rec.Who(), hname)) // nolint: gosec,errcheck
 					} else {
-						logger.LogNotice(fmt.Sprintf("[Shell completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Shell completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)) // nolint: gosec,errcheck
 						hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					}
 				} else if rec.Op()[0] == 'D' {
@@ -598,15 +610,15 @@ func main() {
 					log.Printf("[Client->Server copy]\n")
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					logger.LogNotice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname))
-					runErr, cmdStatus := runClientToServerCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
+					logger.LogNotice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname)) // nolint: gosec,errcheck
+					cmdStatus, runErr := runClientToServerCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
 					// Returned hopefully via an EOF or exit/logout;
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
 					if runErr != nil {
-						logger.LogErr(fmt.Sprintf("[Error running cp for %s@%s]\n", rec.Who(), hname))
+						logger.LogErr(fmt.Sprintf("[Error running cp for %s@%s]\n", rec.Who(), hname)) // nolint: gosec,errcheck
 					} else {
-						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
+						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)) // nolint: gosec,errcheck
 					}
 					hc.SetStatus(hkexnet.CSOType(cmdStatus))
 
@@ -614,32 +626,32 @@ func main() {
 					s := make([]byte, 4)
 					binary.BigEndian.PutUint32(s, cmdStatus)
 					log.Printf("** cp writing closeStat %d at Close()\n", cmdStatus)
-					hc.WritePacket(s, hkexnet.CSOExitStatus)
+					hc.WritePacket(s, hkexnet.CSOExitStatus) // nolint: gosec,errcheck
 				} else if rec.Op()[0] == 'S' {
 					// File copy (src) operation - server copy to client
 					log.Printf("[Server->Client copy]\n")
 					addr := hc.RemoteAddr()
 					hname := goutmp.GetHost(addr.String())
-					logger.LogNotice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname))
-					runErr, cmdStatus := runServerToClientCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
-					// Returned hopefully via an EOF or exit/logout;
+					logger.LogNotice(fmt.Sprintf("[Running copy for [%s@%s]]\n", rec.Who(), hname)) // nolint: gosec,errcheck
+					cmdStatus, runErr := runServerToClientCopyAs(string(rec.Who()), string(rec.TermType()), hc, string(rec.Cmd()), chaffEnabled)
+					if runErr != nil {
+						logger.LogErr(fmt.Sprintf("[Error spawning cp for %s@%s]\n", rec.Who(), hname)) // nolint: gosec,errcheck
+					} else {
+						// Returned hopefully via an EOF or exit/logout;
+						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus)) // nolint: gosec,errcheck
+					}
 					// Clear current op so user can enter next, or EOF
 					rec.SetOp([]byte{0})
-					if runErr != nil {
-						logger.LogErr(fmt.Sprintf("[Error spawning cp for %s@%s]\n", rec.Who(), hname))
-					} else {
-						logger.LogNotice(fmt.Sprintf("[Command completed for %s@%s, status %d]\n", rec.Who(), hname, cmdStatus))
-					}
 					hc.SetStatus(hkexnet.CSOType(cmdStatus))
 					//fmt.Println("Waiting for EOF from other end.")
 					//_, _ = hc.Read(nil /*ackByte*/)
 					//fmt.Println("Got remote end ack.")
 				} else {
-					logger.LogErr(fmt.Sprintln("[Bad hkexsh.Session]"))
+					logger.LogErr(fmt.Sprintln("[Bad hkexsh.Session]")) // nolint: gosec,errcheck
 				}
 				return
-			}(&conn)
+			}(&conn) // nolint: errcheck
 		} // Accept() success
 	} //endfor
-	logger.LogNotice(fmt.Sprintln("[Exiting]"))
+	//logger.LogNotice(fmt.Sprintln("[Exiting]")) // nolint: gosec,errcheck
 }

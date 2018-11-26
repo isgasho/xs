@@ -1,4 +1,4 @@
-.PHONY: clean all
+.PHONY: clean all lint
 
 EXE = $(notdir $(shell pwd))
 
@@ -8,3 +8,5 @@ all:
 clean:
 	$(RM) $(EXE) $(EXE).exe
 
+lint:
+	gometalinter --deadline 60s | sort
