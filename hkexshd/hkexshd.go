@@ -321,7 +321,7 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		// to ensure all stdout data gets to the client before
 		// connection is closed.
 		wg.Add(1)
-		// #gv:s/label=\"runShellAs\$2\"/label=\"ptyToStdoutWorker\"/
+		// #gv:s/label=\"runShellAs\$5\"/label=\"ptyToStdoutWorker\"/
 		go func() {
 			defer wg.Done()
 			_, e := io.Copy(conn, ptmx)
