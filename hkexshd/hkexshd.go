@@ -56,8 +56,8 @@ func runClientToServerCopyAs(who, ttype string, conn *hkexnet.Conn, fpath string
 	// Investigate -- rlm 2018-01-26)
 	os.Clearenv()
 	os.Setenv("HOME", u.HomeDir) // nolint: gosec,errcheck
-	os.Setenv("TERM", ttype) // nolint: gosec,errcheck
-	os.Setenv("HKEXSH", "1") // nolint: gosec,errcheck
+	os.Setenv("TERM", ttype)     // nolint: gosec,errcheck
+	os.Setenv("HKEXSH", "1")     // nolint: gosec,errcheck
 
 	var c *exec.Cmd
 	cmdName := "/bin/tar"
@@ -309,10 +309,9 @@ func runShellAs(who, ttype string, cmd string, interactive bool, conn *hkexnet.C
 		}
 		// #gv:s/label=\"runShellAs\$4\"/label=\"deferChaffShutdown\"/
 		defer func() {
-				conn.DisableChaff()
-				conn.ShutdownChaff()
+			conn.DisableChaff()
+			conn.ShutdownChaff()
 		}()
-		
 
 		// ..and the pty to stdout.
 		// This may take some time exceeding that of the
@@ -548,7 +547,7 @@ func main() {
 					hc.Write([]byte{1}) // nolint: gosec,errcheck
 				} else {
 					logger.LogNotice(fmt.Sprintln("Invalid user", string(rec.Who()))) // nolint: errcheck,gosec
-					hc.Write([]byte{0}) // nolint: gosec,errcheck
+					hc.Write([]byte{0})                                               // nolint: gosec,errcheck
 					return
 				}
 

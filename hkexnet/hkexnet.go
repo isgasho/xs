@@ -79,8 +79,8 @@ type (
 		m          *sync.Mutex // (internal)
 		c          *net.Conn   // which also implements io.Reader, io.Writer, ...
 		immClose   bool
-		cipheropts uint32      // post-KEx cipher/hmac options
-		opts       uint32      // post-KEx protocol options (caller-defined)
+		cipheropts uint32 // post-KEx cipher/hmac options
+		opts       uint32 // post-KEx protocol options (caller-defined)
 		WinCh      chan WinSize
 		Rows       uint16
 		Cols       uint16
@@ -891,9 +891,9 @@ func (hc Conn) Read(b []byte) (n int, err error) {
 					logger.LogDebug(fmt.Sprintf("[Attempt to write data to closed tun [%d:%d]", lport, rport))
 				}
 			} else if ctrlStatOp == CSOTunKeepAlive {
-					// client side has sent keepalive for tunnels -- if client
-					// dies or exits unexpectedly the absence of this will
-					// let the server know to hang up on Dial()ed server rports.
+				// client side has sent keepalive for tunnels -- if client
+				// dies or exits unexpectedly the absence of this will
+				// let the server know to hang up on Dial()ed server rports.
 				_ = binary.BigEndian.Uint16(payloadBytes[0:2])
 				//logger.LogDebug(fmt.Sprintf("[Server] Got CSOTunKeepAlive"))
 				for _, t := range *hc.tuns {
