@@ -20,35 +20,35 @@ bgcolor="#e6ecfa";
 label="main";
 labelloc="t";
         
-        "blitter.com/go/hkexsh/hkexpasswd.main" [ fillcolor="lightblue" label="main" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexpasswd.main" [ label="main" penwidth="0.5" fillcolor="lightblue" ]
         
         subgraph "cluster_blitter.com/go/hkexsh" {
-        fontsize="16";
+        penwidth="0.8";
+fontsize="16";
 style="filled";
 fontname="bold";
 label="[hkexsh]";
-penwidth="0.8";
+URL="/?f=blitter.com/go/hkexsh";
 fillcolor="lightyellow";
 rank="sink";
-URL="/?f=blitter.com/go/hkexsh";
 tooltip="package: blitter.com/go/hkexsh";
         
-        "blitter.com/go/hkexsh.ReadPassword" [ penwidth="1.5" fillcolor="moccasin" label="ReadPassword" ]
+        "blitter.com/go/hkexsh.ReadPassword" [ fillcolor="moccasin" label="ReadPassword" penwidth="1.5" ]
         
     }
 
         subgraph "cluster_github.com/jameskeane/bcrypt" {
-        penwidth="0.8";
-fontsize="16";
+        style="filled";
 fontname="bold";
+rank="sink";
 label="[bcrypt]";
+fontsize="16";
+fillcolor="lightyellow";
 URL="/?f=github.com/jameskeane/bcrypt";
 tooltip="package: github.com/jameskeane/bcrypt";
-style="filled";
-fillcolor="lightyellow";
-rank="sink";
+penwidth="0.8";
         
-        "github.com/jameskeane/bcrypt.Salt" [ fillcolor="moccasin" label="Salt" penwidth="1.5" ]
+        "github.com/jameskeane/bcrypt.Salt" [ penwidth="1.5" fillcolor="moccasin" label="Salt" ]
         "github.com/jameskeane/bcrypt.Hash" [ fillcolor="moccasin" label="Hash" penwidth="1.5" ]
         "github.com/jameskeane/bcrypt.Match" [ fillcolor="moccasin" label="Match" penwidth="1.5" ]
         
