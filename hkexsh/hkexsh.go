@@ -239,14 +239,17 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 	// #gv:s/label=\"doShellMode\$1\"/label=\"shellRemoteToStdin\"/
 	// TODO:.gv:doShellMode:1:shellRemoteToStdin
 	shellRemoteToStdin := func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+		}()
+
 		// By deferring a call to wg.Done(),
 		// each goroutine guarantees that it marks
 		// its direction's stream as finished.
 
-		// io.Copy() expects EOF so normally this will
+		// pkg io/Copy expects EOF so normally this will
 		// exit with inerr == nil
-		_, inerr := io.Copy(os.Stdout, conn)
+		_, inerr := hkexnet.Copy(os.Stdout, conn)
 		if inerr != nil {
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 			// Copy operations and user logging off will cause
@@ -264,6 +267,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		if isInteractive {
 			log.Println("[* Got EOF *]")
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
+			os.Exit(int(rec.Status()))
 		}
 	}
 	go shellRemoteToStdin()
@@ -281,10 +285,9 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 		shellStdinToRemote := func() {
 			defer wg.Done()
 			//!defer wg.Done()
-			// Copy() expects EOF so this will
-			// exit with outerr == nil
-			//!_, outerr := io.Copy(conn, os.Stdin)
 			_, outerr := func(conn *hkexnet.Conn, r io.Reader) (w int64, e error) {
+				// Copy() expects EOF so this will
+				// exit with outerr == nil
 				w, e = io.Copy(conn, r)
 				return w, e
 			}(conn, os.Stdin)
