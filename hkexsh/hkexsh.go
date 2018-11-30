@@ -697,7 +697,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, rejectUserMsg()) // nolint: errcheck
 		rec.SetStatus(255)
 	} else {
-
 		// Set up chaffing to server
 		conn.SetupChaff(chaffFreqMin, chaffFreqMax, chaffBytesMax) // enable client->server chaffing
 		if chaffEnabled {
@@ -729,6 +728,7 @@ func main() {
 		}
 
 		if rec.Status() != 0 {
+			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState)    // nolint: errcheck,gosec
 			fmt.Fprintln(os.Stderr, "Session exited with status:", rec.Status()) // nolint: errcheck
 		}
 	}
