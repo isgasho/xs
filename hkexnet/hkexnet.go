@@ -55,6 +55,32 @@ import (
 const PAD_SZ = 32     // max size of padding applied to each packet
 const HMAC_CHK_SZ = 4 // leading bytes of HMAC to xmit for verification
 
+const Bob = string("\r\n" +
+	"@@@@@@@^^~~~~~~~~~~~~~~~~~~~~^@@@@@@@@@\r\n" +
+	"@@@@@@^     ~^  @  @@ @ @ @ I  ~^@@@@@@\r\n" +
+	"@@@@@            ~ ~~ ~I          @@@@@\r\n" +
+	"@@@@'                  '  _,w@<    @@@@\r\n" +
+	"@@@@     @@@@@@@@w___,w@@@@@@@@  @  @@@\r\n" +
+	"@@@@     @@@@@@@@@@@@@@@@@@@@@@  I  @@@\r\n" +
+	"@@@@     @@@@@@@@@@@@@@@@@@@@*@[ i  @@@\r\n" +
+	"@@@@     @@@@@@@@@@@@@@@@@@@@[][ | ]@@@\r\n" +
+	"@@@@     ~_,,_ ~@@@@@@@~ ____~ @    @@@\r\n" +
+	"@@@@    _~ ,  ,  `@@@~  _  _`@ ]L  J@@@\r\n" +
+	"@@@@  , @@w@ww+   @@@ww``,,@w@ ][  @@@@\r\n" +
+	"@@@@,  @@@@www@@@ @@@@@@@ww@@@@@[  @@@@\r\n" +
+	"@@@@@_|| @@@@@@P' @@P@@@@@@@@@@@[|c@@@@\r\n" +
+	"@@@@@@w| '@@P~  P]@@@-~, ~Y@@^'],@@@@@@\r\n" +
+	"@@@@@@@[   _        _J@@Tk     ]]@@@@@@\r\n" +
+	"@@@@@@@@,@ @@, c,,,,,,,y ,w@@[ ,@@@@@@@\r\n" +
+	"@@@@@@@@@ i @w   ====--_@@@@@  @@@@@@@@\r\n" +
+	"@@@@@@@@@@`,P~ _ ~^^^^Y@@@@@  @@@@@@@@@\r\n" +
+	"@@@@^^=^@@^   ^' ,ww,w@@@@@ _@@@@@@@@@@\r\n" +
+	"@@@_xJ~ ~   ,    @@@@@@@P~_@@@@@@@@@@@@\r\n" +
+	"@@   @,   ,@@@,_____   _,J@@@@@@@@@@@@@\r\n" +
+	"@@L  `' ,@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\r\n" +
+	"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\r\n" +
+	"\r\n")
+
 type (
 	WinSize struct {
 		Rows uint16
@@ -94,6 +120,11 @@ type (
 		w         cipher.Stream //write cipherStream
 		wm        hash.Hash
 		dBuf      *bytes.Buffer //decrypt buffer for Read()
+	}
+
+	EscSeqs struct {
+		idx  int
+		seqs []byte
 	}
 )
 
@@ -697,6 +728,10 @@ func (hl *HKExListener) Accept() (hc Conn, err error) {
 
 // Read into a byte slice
 //
+// In addition to regular io.Reader behaviour this does demultiplexing of
+// secured terminal comms and (if defined) tunnel traffic and session control
+// packet processing.
+//
 // See go doc io.Reader
 func (hc Conn) Read(b []byte) (n int, err error) {
 	for {
@@ -1100,9 +1135,48 @@ func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
 	return
 }
 
+func escSeqScanner(s *EscSeqs, dst io.Writer, b byte) (passthru bool) {
+	passthru = true
+	if s.idx > 0 {
+		switch b {
+		case '~':
+			return
+		case s.seqs[0]:
+			dst.Write([]byte("\x1b[s\x1b[2;1H\x1b[1;31m[HKEXSH]\x1b[39;49m\x1b[u"))
+			passthru = false
+			b = '~'
+		case s.seqs[1]:
+			dst.Write([]byte("\x1b[1;32m[HKEXSH]\x1b[39;49m"))
+			passthru = false
+			b = '~'
+		case s.seqs[2]:
+			dst.Write([]byte("\x1b[1;32m"))
+			dst.Write([]byte(Bob))
+			dst.Write([]byte("\x1b[39;49m"))
+			passthru = false
+			b = '~'
+		}
+	}
+
+	if b == '~' {
+		s.idx++
+	} else {
+		s.idx = 0
+	}
+	return
+}
+
 // copyBuffer is the actual implementation of Copy and CopyBuffer.
 // if buf is nil, one is allocated.
 func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
+	escs := &EscSeqs{idx: 0,
+		seqs: []byte{
+			'i',
+			't',
+			'B',
+		},
+	}
+
 	// If the reader has a WriteTo method, use it to do the copy.
 	// Avoids an allocation and a copy.
 	if wt, ok := src.(io.WriterTo); ok {
@@ -1126,17 +1200,20 @@ func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err er
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
+			// Look for sequences to trigger client-side diags
+			if escSeqScanner(escs, dst, buf[0]) {
+				nw, ew := dst.Write(buf[0:nr])
+				if nw > 0 {
+					written += int64(nw)
+				}
+				if ew != nil {
+					err = ew
+					break
+				}
+				if nr != nw {
+					err = io.ErrShortWrite
+					break
+				}
 			}
 		}
 		if er != nil {
