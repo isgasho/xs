@@ -55,7 +55,7 @@ import (
 const PAD_SZ = 32     // max size of padding applied to each packet
 const HMAC_CHK_SZ = 4 // leading bytes of HMAC to xmit for verification
 
-const Bob = string("\r\n" +
+const Bob = string("\r\n\r\n" +
 	"@@@@@@@^^~~~~~~~~~~~~~~~~~~~~^@@@@@@@@@\r\n" +
 	"@@@@@@^     ~^  @  @@ @ @ @ I  ~^@@@@@@\r\n" +
 	"@@@@@            ~ ~~ ~I          @@@@@\r\n" +
@@ -123,8 +123,9 @@ type (
 	}
 
 	EscSeqs struct {
-		idx  int
-		seqs []byte
+		idx    int
+		seqs   []byte
+		outstr []string
 	}
 )
 
@@ -1142,17 +1143,15 @@ func escSeqScanner(s *EscSeqs, dst io.Writer, b byte) (passthru bool) {
 		case '~':
 			return
 		case s.seqs[0]:
-			dst.Write([]byte("\x1b[s\x1b[2;1H\x1b[1;31m[HKEXSH]\x1b[39;49m\x1b[u"))
+			dst.Write([]byte(s.outstr[0]))
 			passthru = false
 			b = '~'
 		case s.seqs[1]:
-			dst.Write([]byte("\x1b[1;32m[HKEXSH]\x1b[39;49m"))
+			dst.Write([]byte(s.outstr[1]))
 			passthru = false
 			b = '~'
 		case s.seqs[2]:
-			dst.Write([]byte("\x1b[1;32m"))
-			dst.Write([]byte(Bob))
-			dst.Write([]byte("\x1b[39;49m"))
+			dst.Write([]byte(s.outstr[2]))
 			passthru = false
 			b = '~'
 		}
@@ -1174,6 +1173,11 @@ func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err er
 			'i',
 			't',
 			'B',
+		},
+		outstr: []string{
+			"\x1b[s\x1b[2;1H\x1b[1;31m[HKEXSH]\x1b[39;49m\x1b[u",
+			"\x1b[1;32m[HKEXSH]\x1b[39;49m",
+			"\x1b[1;32m" + Bob + "\x1b[39;49m",
 		},
 	}
 
