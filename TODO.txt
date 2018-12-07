@@ -6,6 +6,10 @@ Chaff Improvements
 - Client-input chaff file data (ie., Moby Dick)
 
 KEx: Look at ECIES: https://godoc.org/github.com/bitherhq/go-bither/crypto/ecies
+ThreeBears? BIKE?, NTRU?: https://www.safecrypto.eu/pqclounge/
+NIST Round 1 submissions:
+  https://csrc.nist.gov/projects/post-quantum-cryptography/round-1-submissions
+
 
 Architecture
 (DONE) - Move hkexnet components other than key exchange into a proper hkex package
@@ -27,7 +31,7 @@ Alternate transports for hkexsh.Conn - HTTP-mimicking traffic, ICMP, ... ?
  should in principle be usable as substrate for hkex.Conn)
 
 Install
-- init scripts for open-rc/init (and systemd, sigh)
-- make install
+(DONE - openrc) - init scripts for open-rc/init (and systemd, sigh)
+(DONE) - make install
 - common packages (yum/deb/portage)
 
