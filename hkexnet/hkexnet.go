@@ -46,7 +46,7 @@ import (
 	"sync"
 	"time"
 
-	"blitter.com/go/hkexsh/herradurakex"
+	"blitter.com/go/herradurakex"
 	"blitter.com/go/hkexsh/logger"
 	kyber "git.schwanenlied.me/yawning/kyber.git"
 )

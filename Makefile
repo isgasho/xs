@@ -1,6 +1,6 @@
 .PHONY: lint vis clean common client server passwd subpkgs install uninstall reinstall
 
-SUBPKGS = logger spinsult hkexnet herradurakex
+SUBPKGS = logger spinsult hkexnet
 TOOLS = hkexpasswd hkexsh hkexshd
 SUBDIRS = $(LIBS) $(TOOLS)
 
