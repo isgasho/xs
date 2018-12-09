@@ -249,7 +249,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 
 		// pkg io/Copy expects EOF so normally this will
 		// exit with inerr == nil
-		_, inerr := hkexnet.Copy(os.Stdout, conn)
+		_, inerr := io.Copy(os.Stdout, conn)
 		if inerr != nil {
 			_ = hkexsh.Restore(int(os.Stdin.Fd()), oldState) // #nosec
 			// Copy operations and user logging off will cause
@@ -288,7 +288,7 @@ func doShellMode(isInteractive bool, conn *hkexnet.Conn, oldState *hkexsh.State,
 			_, outerr := func(conn *hkexnet.Conn, r io.Reader) (w int64, e error) {
 				// Copy() expects EOF so this will
 				// exit with outerr == nil
-				w, e = io.Copy(conn, r)
+				w, e = hkexnet.Copy(conn, r)
 				return w, e
 			}(conn, os.Stdin)
 
