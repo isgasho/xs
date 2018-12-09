@@ -86,6 +86,11 @@ type (
 // the copy is implemented by calling src.WriteTo(dst).
 // Otherwise, if dst implements the ReaderFrom interface,
 // the copy is implemented by calling dst.ReadFrom(src).
+//
+// This is identical to stdlib pkg/io.Copy save that it
+// calls a client-custom version of copyBuffer(), which allows
+// some client escape sequences to trigger special actions during
+// interactive sessions.
 func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
 	written, err = copyBuffer(dst, src, nil)
 	return
@@ -93,6 +98,10 @@ func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
 
 // copyBuffer is the actual implementation of Copy and CopyBuffer.
 // if buf is nil, one is allocated.
+//
+// This private version of copyBuffer is derived from the
+// go stdlib pkg/io, with escape sequence interpretation to trigger
+// some special client-side actions.
 func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
 	// NOTE: using dst.Write() in these esc funcs will cause the output
 	// to function as a 'macro', outputting as if user typed the sequence.
