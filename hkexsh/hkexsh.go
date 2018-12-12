@@ -43,7 +43,7 @@ var (
 
 ////////////////////////////////////////////////////
 
-const Bob = string("\r\n\r\n" +
+const bob = string("\r\n\r\n" +
 	"@@@@@@@^^~~~~~~~~~~~~~~~~~~~~^@@@@@@@@@\r\n" +
 	"@@@@@@^     ~^  @  @@ @ @ @ I  ~^@@@@@@\r\n" +
 	"@@@@@            ~ ~~ ~I          @@@@@\r\n" +
@@ -70,8 +70,8 @@ const Bob = string("\r\n\r\n" +
 	"\r\n")
 
 type (
-	EscHandler func(io.Writer)
-	EscSeqs    map[byte]EscHandler
+	escHandler func(io.Writer)
+	escSeqs    map[byte]escHandler
 )
 
 // Copy copies from src to dst until either EOF is reached
@@ -117,10 +117,10 @@ func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err er
 	// outlive individual copyBuffer calls).
 	// (Note that since this custom copyBuffer func is used only by
 	// the hkexsh client, it should eventually be moved to client.)
-	escs := EscSeqs{
+	escs := escSeqs{
 		'i': func(io.Writer) { os.Stdout.Write([]byte("\x1b[s\x1b[2;1H\x1b[1;31m[HKEXSH]\x1b[39;49m\x1b[u")) },
 		't': func(io.Writer) { os.Stdout.Write([]byte("\x1b[1;32m[HKEXSH]\x1b[39;49m")) },
-		'B': func(io.Writer) { os.Stdout.Write([]byte("\x1b[1;32m" + Bob + "\x1b[39;49m")) },
+		'B': func(io.Writer) { os.Stdout.Write([]byte("\x1b[1;32m" + bob + "\x1b[39;49m")) },
 	}
 
 	/*

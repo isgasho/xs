@@ -285,7 +285,7 @@ func (r randReader) Read(b []byte) (n int, e error) {
 	return
 }
 
-func KyberDialSetup(c net.Conn, hc *Conn) (err error) {
+func KyberDialSetup(c io.ReadWriter /*net.Conn*/, hc *Conn) (err error) {
 	// Send hkexnet.Conn parameters to remote side
 
 	// Alice, step 1: Generate a key pair.
@@ -335,7 +335,7 @@ func KyberDialSetup(c net.Conn, hc *Conn) (err error) {
 	return
 }
 
-func HKExDialSetup(c net.Conn, hc *Conn) (err error) {
+func HKExDialSetup(c io.ReadWriter /*net.Conn*/, hc *Conn) (err error) {
 	var h *hkex.HerraduraKEx
 	switch hc.kex {
 	case KEX_HERRADURA256:
