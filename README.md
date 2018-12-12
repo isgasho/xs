@@ -1,13 +1,15 @@
+[![GoDoc](https://godoc.org/blitter.com/go/hkexsh?status.svg)](https://godoc.org/blitter.com/go/hkexsh)
+
 HKExSh
 --
 
 HKExSh (**H**erradura**K**yber**Ex** **Sh**ell) is a golang implementation of a simple
 remote shell client and server, similar in role to ssh, offering
-encrypted interactive and non-interactive sessions, file copying and tunnels with traffic activity obfuscation ('chaffing').
+encrypted interactive and non-interactive sessions, file copying and tunnels with traffic obfuscation ('chaffing').
 
 ***
 
-**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NO WARRANTY OR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
+**NOTE: Due to the experimental nature of the HerraduraKEx and Kyber IND-CCA-2 algorithms, and the novelty of the overall codebase, this package SHOULD BE CONSIDERED EXTREMELY EXPERIMENTAL and USED WITH CAUTION. It DEFINITELY SHOULD NOT be used for any sensitive applications. USE AT YOUR OWN RISK. NEITHER WARRANTY NOR CLAIM OF FITNESS FOR PURPOSE IS EXPRESSED OR IMPLIED.**
 
 ***
 
@@ -29,7 +31,7 @@ Currently supported session algorithms:
 * AES-256
 * Twofish-128
 * Blowfish-64
-* CryptMTv1 (https://eprint.iacr.org/2005/165.pdf)
+* CryptMTv1 (64bit) (https://eprint.iacr.org/2005/165.pdf)
 
 [HMAC]
 * HMAC-SHA256
@@ -38,12 +40,12 @@ Currently supported session algorithms:
 
 Calls to hkexnet.Dial() and hkexnet.Listen()/Accept() are generally the same as calls to the equivalents within the _net_ package; however upon connection a key exchange automatically occurs whereby client and server independently derive the same keying material, and all following traffic is secured by a symmetric encryption algorithm.
 
-Above the hkexnet.Conn layer, the server and client apps in this repository (server/hkexshd and client/hkexsh) negotiate session settings (cipher/hmac algorithms, interactive/non-interactive, etc.) to be used for communication.
+Above the hkexnet.Conn layer, the server and client apps in this repository (hkexshd/ and hkexsh/ respectively) negotiate session settings (cipher/hmac algorithms, interactive/non-interactive, tunnels, if any, etc.) to be used for communication.
 
 Packets are subject to random padding (size, prefix/postfix), and (optionally) the client and server
 channels can both send _chaff_ packets at random defineable intervals to help thwart analysis of session activity (applicable to interactive and non-interactive command sessions, file copies and tunnels).
 
-Tunnels, if specified, are set up during initial client->server connection negotiation. Packets from the client local port(s) are sent through the main secured connection to the server's remote port(s), and vice versa, tagged with a tunnel specifier so that they can be de-multiplexed and delivered to the proper tunnel endpoints.
+Tunnels, if specified, are set up during initial client->server connection. Packets from the client local port(s) are sent through the main secured connection to the server's remote port(s), and vice versa, tagged with a tunnel specifier so that they can be de-multiplexed and delivered to the proper tunnel endpoints.
 
 Finally, within the hkexpasswd/ directory is a password-setting utility. HKExSh uses its own passwd file distinct from the system /etc/passwd to authenticate clients, using standard bcrypt+salt storage.
 
@@ -84,10 +86,14 @@ To build
 * $ cd $GOPATH/src/blitter.com/go/hkexsh
 * $ make clean all
 
-
-To install
+To install, uninstall, re-install
 --
-* $ sudo make install
+* $ sudo make [install | uninstall | reinstall]
+
+To manage service (assuming openrc init)
+--
+* $ sudo rc-config [start | restart | stop] hkexshd
+
 
 An example init script (hkexshd.initrc) is provided. Consult your Linux distribution documentation for proper service/daemon installation. Default assumes installation in /usr/local/sbin (hkexshd, hkexpasswd) and /usr/local/bin (hkexsh/hkexcp symlink).
 
@@ -99,7 +105,7 @@ To set accounts & passwords:
 * $ &lt;enter a password, enter again to confirm&gt;
 
 
-Testing Client and Server from $GOPATH dev tree
+Testing Client and Server from $GOPATH dev tree (w/o 'make install')
 --
 In separate shells A and B:
 * [A]$ cd hkexshd && sudo ./hkexshd &  # add -d for debugging
@@ -152,14 +158,9 @@ Simple tunnels (client -> server, no reverse tunnels for now) are supported.
 Syntax: hkexsh -T=&lt;tunspec&gt;{,&lt;tunspec&gt;...}
 .. where &lt;tunspec&gt; is &lt;localport:remoteport&gt;
 
-Example, tunnelling ssh through hkexsh
+Example, tunnelling ssh through hkexsh (NOTE [issue #15](https://blitter.com:3000/RLabs/hkexsh/issues/15))
 
 * [server side] $ sudo /usr/sbin/sshd -p 7002
 * [client side, term A] $ hkexsh -T=6002:7002 user@server
 * [client side, term B] $ ssh user@localhost -p 6002
-
-
-To uninstall
---
-* $ sudo make uninstall
 
