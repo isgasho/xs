@@ -1,6 +1,5 @@
 [![GoDoc](https://godoc.org/blitter.com/go/hkexsh?status.svg)](https://godoc.org/blitter.com/go/hkexsh)
 
-
 HKExSh
 --
 
