@@ -14,78 +14,83 @@ digraph gocallvis {
     edge [minlen="2"]
 
     subgraph "cluster_focus" {
-        labeljust="c";
-fontsize="18";
-bgcolor="#e6ecfa";
+        bgcolor="#e6ecfa";
 label="main";
 labelloc="t";
+labeljust="c";
+fontsize="18";
         
-        "blitter.com/go/hkexsh/hkexsh.sendSessionParams" [ fillcolor="lightblue" label="sendSessionParams" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.doCopyMode" [ penwidth="0.5" fillcolor="lightblue" label="doCopyMode" ]
+        "blitter.com/go/hkexsh/hkexsh.main" [ fillcolor="lightblue" label="main" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.parseNonSwitchArgs" [ fillcolor="lightblue" label="parseNonSwitchArgs" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.main$1" [ fillcolor="lightblue" label="deferRestore" style="dotted,filled" ]
+        "blitter.com/go/hkexsh/hkexsh.sendSessionParams" [ penwidth="0.5" fillcolor="lightblue" label="sendSessionParams" ]
+        "blitter.com/go/hkexsh/hkexsh.rejectUserMsg" [ fillcolor="lightblue" label="rejectUserMsg" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.main$2" [ fillcolor="lightblue" label="deferCloseChaff" style="dotted,filled" ]
+        "blitter.com/go/hkexsh/hkexsh.reqTunnel" [ fillcolor="lightblue" label="reqTunnel" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.launchTuns" [ fillcolor="lightblue" label="launchTuns" penwidth="0.5" ]
         "blitter.com/go/hkexsh/hkexsh.doShellMode$1" [ fillcolor="lightblue" label="shellRemoteToStdin" style="dotted,filled" ]
         "blitter.com/go/hkexsh/hkexsh.doShellMode$1$1" [ fillcolor="lightblue" label="doShellMode$1$1" style="dotted,filled" ]
-        "blitter.com/go/hkexsh/hkexsh.main$1" [ fillcolor="lightblue" label="deferRestore" style="dotted,filled" ]
-        "blitter.com/go/hkexsh/hkexsh.reqTunnel" [ fillcolor="lightblue" label="reqTunnel" penwidth="0.5" ]
-        "blitter.com/go/hkexsh/hkexsh.doShellMode" [ fillcolor="lightblue" label="doShellMode" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.doShellMode" [ label="doShellMode" penwidth="0.5" fillcolor="lightblue" ]
         "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" [ fillcolor="lightblue" label="handleTermResizes$1" style="dotted,filled" ]
         "blitter.com/go/hkexsh/hkexsh.GetSize" [ fillcolor="lightblue" label="GetSize" penwidth="1.5" ]
         "blitter.com/go/hkexsh/hkexsh.handleTermResizes" [ fillcolor="lightblue" label="handleTermResizes" penwidth="0.5" ]
-        "blitter.com/go/hkexsh/hkexsh.doShellMode$2" [ fillcolor="lightblue" label="shellStdinToRemote" style="dotted,filled" ]
+        "blitter.com/go/hkexsh/hkexsh.copyBuffer" [ label="copyBuffer" penwidth="0.5" fillcolor="lightblue" ]
+        "blitter.com/go/hkexsh/hkexsh.copyBuffer$1" [ style="dotted,filled" fillcolor="lightblue" label="copyBuffer$1" ]
+        "blitter.com/go/hkexsh/hkexsh.copyBuffer$2" [ fillcolor="lightblue" label="copyBuffer$2" style="dotted,filled" ]
+        "blitter.com/go/hkexsh/hkexsh.copyBuffer$3" [ fillcolor="lightblue" label="copyBuffer$3" style="dotted,filled" ]
+        "blitter.com/go/hkexsh/hkexsh.Copy" [ penwidth="1.5" fillcolor="lightblue" label="Copy" ]
         "blitter.com/go/hkexsh/hkexsh.doShellMode$2$1" [ fillcolor="lightblue" label="doShellMode$2$1" style="dotted,filled" ]
-        "blitter.com/go/hkexsh/hkexsh.main$2" [ fillcolor="lightblue" label="deferCloseChaff" style="dotted,filled" ]
-        "blitter.com/go/hkexsh/hkexsh.main" [ fillcolor="lightblue" label="main" penwidth="0.5" ]
-        "blitter.com/go/hkexsh/hkexsh.parseNonSwitchArgs" [ fillcolor="lightblue" label="parseNonSwitchArgs" penwidth="0.5" ]
-        "blitter.com/go/hkexsh/hkexsh.rejectUserMsg" [ fillcolor="lightblue" label="rejectUserMsg" penwidth="0.5" ]
-        "blitter.com/go/hkexsh/hkexsh.launchTuns" [ label="launchTuns" penwidth="0.5" fillcolor="lightblue" ]
-        "blitter.com/go/hkexsh/hkexsh.doCopyMode" [ fillcolor="lightblue" label="doCopyMode" penwidth="0.5" ]
+        "blitter.com/go/hkexsh/hkexsh.doShellMode$2" [ fillcolor="lightblue" label="shellStdinToRemote" style="dotted,filled" ]
         "blitter.com/go/hkexsh/hkexsh.usageShell" [ fillcolor="lightblue" label="usageShell" penwidth="0.5" ]
-        "blitter.com/go/hkexsh/hkexsh.usageCp" [ penwidth="0.5" fillcolor="lightblue" label="usageCp" ]
+        "blitter.com/go/hkexsh/hkexsh.usageCp" [ fillcolor="lightblue" label="usageCp" penwidth="0.5" ]
         
         subgraph "cluster_blitter.com/go/hkexsh" {
-        fontsize="16";
-style="filled";
+        rank="sink";
+fontsize="16";
 fontname="bold";
-rank="sink";
-penwidth="0.8";
 fillcolor="lightyellow";
 label="[hkexsh]";
 URL="/?f=blitter.com/go/hkexsh";
 tooltip="package: blitter.com/go/hkexsh";
+penwidth="0.8";
+style="filled";
         
-        "blitter.com/go/hkexsh.Restore" [ fillcolor="moccasin" label="Restore" penwidth="1.5" ]
         "blitter.com/go/hkexsh.MakeRaw" [ fillcolor="moccasin" label="MakeRaw" penwidth="1.5" ]
+        "blitter.com/go/hkexsh.Restore" [ label="Restore" penwidth="1.5" fillcolor="moccasin" ]
         "blitter.com/go/hkexsh.ReadPassword" [ fillcolor="moccasin" label="ReadPassword" penwidth="1.5" ]
         "blitter.com/go/hkexsh.NewSession" [ fillcolor="moccasin" label="NewSession" penwidth="1.5" ]
         
         subgraph "cluster_*blitter.com/go/hkexsh.Session" {
-        style="rounded,filled";
+        fontsize="15";
+fontcolor="#222222";
+labelloc="b";
+style="rounded,filled";
 fillcolor="wheat2";
 label="(*Session)";
 tooltip="type: *blitter.com/go/hkexsh.Session";
 penwidth="0.5";
-fontsize="15";
-fontcolor="#222222";
-labelloc="b";
         
         "(*blitter.com/go/hkexsh.Session).SetStatus" [ fillcolor="moccasin" label="SetStatus" penwidth="1.5" ]
         
     }
 
         subgraph "cluster_blitter.com/go/hkexsh.Session" {
-        penwidth="0.5";
+        fillcolor="wheat2";
+label="(Session)";
+tooltip="type: blitter.com/go/hkexsh.Session";
+penwidth="0.5";
 fontsize="15";
 fontcolor="#222222";
 labelloc="b";
 style="rounded,filled";
-fillcolor="wheat2";
-label="(Session)";
-tooltip="type: blitter.com/go/hkexsh.Session";
         
+        "(blitter.com/go/hkexsh.Session).Cmd" [ fillcolor="moccasin" label="Cmd" penwidth="1.5" ]
         "(blitter.com/go/hkexsh.Session).Op" [ fillcolor="moccasin" label="Op" penwidth="1.5" ]
-        "(blitter.com/go/hkexsh.Session).Who" [ label="Who" penwidth="1.5" fillcolor="moccasin" ]
+        "(blitter.com/go/hkexsh.Session).Who" [ penwidth="1.5" fillcolor="moccasin" label="Who" ]
         "(blitter.com/go/hkexsh.Session).ConnHost" [ fillcolor="moccasin" label="ConnHost" penwidth="1.5" ]
         "(blitter.com/go/hkexsh.Session).TermType" [ fillcolor="moccasin" label="TermType" penwidth="1.5" ]
-        "(blitter.com/go/hkexsh.Session).Cmd" [ fillcolor="moccasin" label="Cmd" penwidth="1.5" ]
-        "(blitter.com/go/hkexsh.Session).AuthCookie" [ fillcolor="moccasin" label="AuthCookie" penwidth="1.5" ]
+        "(blitter.com/go/hkexsh.Session).AuthCookie" [ label="AuthCookie" penwidth="1.5" fillcolor="moccasin" ]
         "(blitter.com/go/hkexsh.Session).Status" [ penwidth="1.5" fillcolor="moccasin" label="Status" ]
         
     }
@@ -93,99 +98,98 @@ tooltip="type: blitter.com/go/hkexsh.Session";
     }
 
         subgraph "cluster_blitter.com/go/hkexsh/hkexnet" {
-        fillcolor="lightyellow";
+        fontsize="16";
+fillcolor="lightyellow";
 fontname="bold";
-tooltip="package: blitter.com/go/hkexsh/hkexnet";
+URL="/?f=blitter.com/go/hkexsh/hkexnet";
 penwidth="0.8";
-style="filled";
 rank="sink";
 label="[hkexnet]";
-URL="/?f=blitter.com/go/hkexsh/hkexnet";
-fontsize="16";
+tooltip="package: blitter.com/go/hkexsh/hkexnet";
+style="filled";
         
-        "blitter.com/go/hkexsh/hkexnet.Copy" [ fillcolor="moccasin" label="Copy" penwidth="1.5" ]
-        "blitter.com/go/hkexsh/hkexnet.Init" [ fillcolor="moccasin" label="Init" penwidth="1.5" ]
+        "blitter.com/go/hkexsh/hkexnet.Init" [ penwidth="1.5" fillcolor="moccasin" label="Init" ]
         "blitter.com/go/hkexsh/hkexnet.Dial" [ fillcolor="moccasin" label="Dial" penwidth="1.5" ]
         
         subgraph "cluster_*blitter.com/go/hkexsh/hkexnet.Conn" {
-        fontcolor="#222222";
+        fontsize="15";
+fontcolor="#222222";
 labelloc="b";
 style="rounded,filled";
 fillcolor="wheat2";
 label="(*Conn)";
 tooltip="type: *blitter.com/go/hkexsh/hkexnet.Conn";
 penwidth="0.5";
-fontsize="15";
         
         "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ fillcolor="moccasin" label="WritePacket" penwidth="1.5" ]
-        "(*blitter.com/go/hkexsh/hkexnet.Conn).Close" [ label="Close" penwidth="1.5" fillcolor="moccasin" ]
+        "(*blitter.com/go/hkexsh/hkexnet.Conn).SetStatus" [ penwidth="1.5" fillcolor="moccasin" label="SetStatus" ]
+        "(*blitter.com/go/hkexsh/hkexnet.Conn).Close" [ fillcolor="moccasin" label="Close" penwidth="1.5" ]
         "(*blitter.com/go/hkexsh/hkexnet.Conn).SetupChaff" [ fillcolor="moccasin" label="SetupChaff" penwidth="1.5" ]
-        "(*blitter.com/go/hkexsh/hkexnet.Conn).EnableChaff" [ fillcolor="moccasin" label="EnableChaff" penwidth="1.5" ]
+        "(*blitter.com/go/hkexsh/hkexnet.Conn).EnableChaff" [ penwidth="1.5" fillcolor="moccasin" label="EnableChaff" ]
         "(*blitter.com/go/hkexsh/hkexnet.Conn).DisableChaff" [ fillcolor="moccasin" label="DisableChaff" penwidth="1.5" ]
-        "(*blitter.com/go/hkexsh/hkexnet.Conn).ShutdownChaff" [ fillcolor="moccasin" label="ShutdownChaff" penwidth="1.5" ]
-        "(*blitter.com/go/hkexsh/hkexnet.Conn).SetStatus" [ fillcolor="moccasin" label="SetStatus" penwidth="1.5" ]
+        "(*blitter.com/go/hkexsh/hkexnet.Conn).ShutdownChaff" [ label="ShutdownChaff" penwidth="1.5" fillcolor="moccasin" ]
         
     }
 
         subgraph "cluster_blitter.com/go/hkexsh/hkexnet.Conn" {
-        style="rounded,filled";
-fillcolor="wheat2";
-label="(Conn)";
+        label="(Conn)";
 tooltip="type: blitter.com/go/hkexsh/hkexnet.Conn";
 penwidth="0.5";
 fontsize="15";
 fontcolor="#222222";
 labelloc="b";
+style="rounded,filled";
+fillcolor="wheat2";
         
-        "(blitter.com/go/hkexsh/hkexnet.Conn).Write" [ penwidth="1.5" fillcolor="moccasin" label="Write" ]
-        "(blitter.com/go/hkexsh/hkexnet.Conn).GetStatus" [ fillcolor="moccasin" label="GetStatus" penwidth="1.5" ]
         "(blitter.com/go/hkexsh/hkexnet.Conn).Read" [ fillcolor="moccasin" label="Read" penwidth="1.5" ]
+        "(blitter.com/go/hkexsh/hkexnet.Conn).GetStatus" [ fillcolor="moccasin" label="GetStatus" penwidth="1.5" ]
+        "(blitter.com/go/hkexsh/hkexnet.Conn).Write" [ label="Write" penwidth="1.5" fillcolor="moccasin" ]
         
     }
 
     }
 
         subgraph "cluster_blitter.com/go/hkexsh/logger" {
-        URL="/?f=blitter.com/go/hkexsh/logger";
-tooltip="package: blitter.com/go/hkexsh/logger";
-penwidth="0.8";
-fontname="bold";
-rank="sink";
+        rank="sink";
 label="[logger]";
+URL="/?f=blitter.com/go/hkexsh/logger";
+penwidth="0.8";
 fontsize="16";
 style="filled";
 fillcolor="lightyellow";
+fontname="bold";
+tooltip="package: blitter.com/go/hkexsh/logger";
         
-        "blitter.com/go/hkexsh/logger.LogDebug" [ fillcolor="moccasin" label="LogDebug" penwidth="1.5" ]
-        "blitter.com/go/hkexsh/logger.New" [ fillcolor="moccasin" label="New" penwidth="1.5" ]
+        "blitter.com/go/hkexsh/logger.New" [ label="New" penwidth="1.5" fillcolor="moccasin" ]
+        "blitter.com/go/hkexsh/logger.LogDebug" [ label="LogDebug" penwidth="1.5" fillcolor="moccasin" ]
         
     }
 
         subgraph "cluster_blitter.com/go/hkexsh/spinsult" {
-        penwidth="0.8";
-fontsize="16";
+        label="[spinsult]";
 style="filled";
-rank="sink";
-label="[spinsult]";
-tooltip="package: blitter.com/go/hkexsh/spinsult";
-fillcolor="lightyellow";
 fontname="bold";
+fillcolor="lightyellow";
+rank="sink";
 URL="/?f=blitter.com/go/hkexsh/spinsult";
+tooltip="package: blitter.com/go/hkexsh/spinsult";
+penwidth="0.8";
+fontsize="16";
         
         "blitter.com/go/hkexsh/spinsult.GetSentence" [ fillcolor="moccasin" label="GetSentence" penwidth="1.5" ]
         
     }
 
         subgraph "cluster_github.com/mattn/go-isatty" {
-        rank="sink";
-URL="/?f=github.com/mattn/go-isatty";
-tooltip="package: github.com/mattn/go-isatty";
-penwidth="0.8";
-style="filled";
+        style="filled";
 fillcolor="lightyellow";
 fontname="bold";
-label="[isatty]";
+tooltip="package: github.com/mattn/go-isatty";
+penwidth="0.8";
 fontsize="16";
+URL="/?f=github.com/mattn/go-isatty";
+rank="sink";
+label="[isatty]";
         
         "github.com/mattn/go-isatty.IsTerminal" [ fillcolor="moccasin" label="IsTerminal" penwidth="1.5" ]
         
@@ -193,31 +197,11 @@ fontsize="16";
 
     }
 
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).Op" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).Who" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).ConnHost" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).TermType" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).Cmd" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).AuthCookie" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh/hkexnet.Conn).Write" [ style="dashed" color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$1$1" [ arrowhead="normalnoneodiamond" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "blitter.com/go/hkexsh/hkexnet.Copy" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "(blitter.com/go/hkexsh/hkexnet.Conn).GetStatus" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "(*blitter.com/go/hkexsh.Session).SetStatus" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "(blitter.com/go/hkexsh.Session).Status" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.main$1" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.reqTunnel" -> "blitter.com/go/hkexsh/logger.LogDebug" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.reqTunnel" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$1" [ arrowhead="normalnoneodot" ]
-    "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" -> "blitter.com/go/hkexsh/hkexsh.GetSize" [  ]
-    "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.handleTermResizes" -> "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" [ arrowhead="normalnoneodot" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode" -> "blitter.com/go/hkexsh/hkexsh.handleTermResizes" [  ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$2" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$2$1" [  ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode$2" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doShellMode" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$2" [ arrowhead="normalnoneodot" ]
-    "blitter.com/go/hkexsh/hkexsh.main$2" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(blitter.com/go/hkexsh.Session).Cmd" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(blitter.com/go/hkexsh/hkexnet.Conn).Read" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).SetStatus" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(blitter.com/go/hkexsh/hkexnet.Conn).GetStatus" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.parseNonSwitchArgs" [  ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/logger.New" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexnet.Init" [ color="saddlebrown" ]
@@ -225,9 +209,17 @@ fontsize="16";
     "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).Close" [ arrowhead="normalnoneodiamond" color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "github.com/mattn/go-isatty.IsTerminal" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh.MakeRaw" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.main$1" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.main$1" [ arrowhead="normalnoneodiamond" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh.ReadPassword" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh.NewSession" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).Op" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).Who" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).ConnHost" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).TermType" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).Cmd" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh.Session).AuthCookie" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.sendSessionParams" -> "(blitter.com/go/hkexsh/hkexnet.Conn).Write" [ style="dashed" color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.sendSessionParams" [  ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "(blitter.com/go/hkexsh/hkexnet.Conn).Read" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh.Session).SetStatus" [ color="saddlebrown" ]
@@ -236,17 +228,34 @@ fontsize="16";
     "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).SetupChaff" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).EnableChaff" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).DisableChaff" [ arrowhead="normalnoneodiamond" color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).ShutdownChaff" [ color="saddlebrown" arrowhead="normalnoneodiamond" ]
+    "blitter.com/go/hkexsh/hkexsh.main" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).ShutdownChaff" [ arrowhead="normalnoneodiamond" color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.main$2" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.main$2" [ arrowhead="normalnoneodot" ]
+    "blitter.com/go/hkexsh/hkexsh.reqTunnel" -> "blitter.com/go/hkexsh/logger.LogDebug" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.reqTunnel" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.launchTuns" -> "blitter.com/go/hkexsh/hkexsh.reqTunnel" [  ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.launchTuns" [  ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$1$1" [ arrowhead="normalnoneodiamond" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "(blitter.com/go/hkexsh/hkexnet.Conn).GetStatus" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "(*blitter.com/go/hkexsh.Session).SetStatus" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$1" -> "(blitter.com/go/hkexsh.Session).Status" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$1" [ arrowhead="normalnoneodot" ]
+    "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" -> "blitter.com/go/hkexsh/hkexsh.GetSize" [  ]
+    "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.handleTermResizes" -> "blitter.com/go/hkexsh/hkexsh.handleTermResizes$1" [ arrowhead="normalnoneodot" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode" -> "blitter.com/go/hkexsh/hkexsh.handleTermResizes" [  ]
+    "blitter.com/go/hkexsh/hkexsh.copyBuffer" -> "(blitter.com/go/hkexsh/hkexnet.Conn).Write" [ style="dashed" color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.copyBuffer" -> "blitter.com/go/hkexsh/hkexsh.copyBuffer$1" [ style="dashed" ]
+    "blitter.com/go/hkexsh/hkexsh.copyBuffer" -> "blitter.com/go/hkexsh/hkexsh.copyBuffer$2" [ style="dashed" ]
+    "blitter.com/go/hkexsh/hkexsh.copyBuffer" -> "blitter.com/go/hkexsh/hkexsh.copyBuffer$3" [ style="dashed" ]
+    "blitter.com/go/hkexsh/hkexsh.Copy" -> "blitter.com/go/hkexsh/hkexsh.copyBuffer" [  ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$2$1" -> "blitter.com/go/hkexsh/hkexsh.Copy" [  ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$2" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$2$1" [  ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode$2" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
+    "blitter.com/go/hkexsh/hkexsh.doShellMode" -> "blitter.com/go/hkexsh/hkexsh.doShellMode$2" [ arrowhead="normalnoneodot" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.doShellMode" [  ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "(blitter.com/go/hkexsh.Session).Status" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(blitter.com/go/hkexsh.Session).Cmd" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).WritePacket" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(blitter.com/go/hkexsh/hkexnet.Conn).Read" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(*blitter.com/go/hkexsh/hkexnet.Conn).SetStatus" [ color="saddlebrown" ]
-    "blitter.com/go/hkexsh/hkexsh.doCopyMode" -> "(blitter.com/go/hkexsh/hkexnet.Conn).GetStatus" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.doCopyMode" [  ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh.Restore" [ color="saddlebrown" ]
     "blitter.com/go/hkexsh/hkexsh.main" -> "blitter.com/go/hkexsh/hkexsh.usageShell" [ style="dashed" ]

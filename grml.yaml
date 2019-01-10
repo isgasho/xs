@@ -1,0 +1,44 @@
+env:
+  project: hkexsh
+  version: 0.8.0
+  buildDir: build/
+  docDir: doc/
+  releaseDir: ${project}-${version}/
+
+options:
+  debug: false
+  breakfast:
+    - sausage & spam
+    - spam, egg, sausage & spam
+    - spam, spam, beans, spam & spam
+
+commands:
+  release:
+    help: do full rebuild, docgen and store artifacts in ${releaseDir}
+    deps:
+      - vis
+      - app
+    exec: |
+      echo "TODO: cp binary and docs to ${releaseDir}"
+
+  install:
+    help: install binaries (root)
+    deps:
+      - app
+    as-root: true
+    exec: |
+      make reinstall
+
+  vis:
+    help: generate graphviz (via go-callvis)
+    deps:
+      - app
+    exec: |
+      make vis
+
+  app:
+    aliases: [ build ]
+    help: build the hkexsh tools
+    exec: |
+      make clean
+      make all

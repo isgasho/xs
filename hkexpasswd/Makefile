@@ -10,7 +10,7 @@ clean:
 	$(RM) $(EXE) $(EXE).exe
 
 vis:
-	go-callvis -skipbrowser -png -svg -output hkexpasswd-vis -ignore $(EXTPKGS) -group pkg,type .
+	go-callvis -format png -file hkexpasswd-vis -ignore $(EXTPKGS) -group pkg,type .
 
 lint:
 	-gometalinter --deadline=60s | sort

@@ -14,42 +14,42 @@ digraph gocallvis {
     edge [minlen="2"]
 
     subgraph "cluster_focus" {
-        bgcolor="#e6ecfa";
+        labeljust="c";
+fontsize="18";
+bgcolor="#e6ecfa";
 label="main";
 labelloc="t";
-labeljust="c";
-fontsize="18";
         
         "blitter.com/go/hkexsh/hkexpasswd.main" [ fillcolor="lightblue" label="main" penwidth="0.5" ]
         
         subgraph "cluster_blitter.com/go/hkexsh" {
         penwidth="0.8";
-fontname="bold";
-label="[hkexsh]";
-tooltip="package: blitter.com/go/hkexsh";
 fontsize="16";
-style="filled";
 fillcolor="lightyellow";
-rank="sink";
 URL="/?f=blitter.com/go/hkexsh";
+tooltip="package: blitter.com/go/hkexsh";
+style="filled";
+fontname="bold";
+rank="sink";
+label="[hkexsh]";
         
-        "blitter.com/go/hkexsh.ReadPassword" [ fillcolor="moccasin" label="ReadPassword" penwidth="1.5" ]
+        "blitter.com/go/hkexsh.ReadPassword" [ penwidth="1.5" fillcolor="moccasin" label="ReadPassword" ]
         
     }
 
         subgraph "cluster_github.com/jameskeane/bcrypt" {
-        tooltip="package: github.com/jameskeane/bcrypt";
+        style="filled";
+URL="/?f=github.com/jameskeane/bcrypt";
 penwidth="0.8";
 fillcolor="lightyellow";
-label="[bcrypt]";
-rank="sink";
-URL="/?f=github.com/jameskeane/bcrypt";
-fontsize="16";
-style="filled";
 fontname="bold";
+rank="sink";
+label="[bcrypt]";
+tooltip="package: github.com/jameskeane/bcrypt";
+fontsize="16";
         
         "github.com/jameskeane/bcrypt.Salt" [ fillcolor="moccasin" label="Salt" penwidth="1.5" ]
-        "github.com/jameskeane/bcrypt.Hash" [ penwidth="1.5" fillcolor="moccasin" label="Hash" ]
+        "github.com/jameskeane/bcrypt.Hash" [ fillcolor="moccasin" label="Hash" penwidth="1.5" ]
         "github.com/jameskeane/bcrypt.Match" [ fillcolor="moccasin" label="Match" penwidth="1.5" ]
         
     }

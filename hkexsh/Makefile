@@ -10,8 +10,8 @@ clean:
 	$(RM) $(EXE) $(EXE).exe
 
 vis:
-	go-callvis -skipbrowser -output hkexsh-vis -ignore $(EXTPKGS) -group pkg,type .
-	../fixup-gv.sh hkexsh.go && cat hkexsh-vis.gv | dot -Tpng -ohkexsh-vis.gv.png
+	go-callvis -file hkexsh-vis -format jpg -ignore $(EXTPKGS) -group pkg,type .
+	../fixup-gv.sh hkexsh.go && cat hkexsh-vis.gv | dot -Tjpg -ohkexsh-vis-fixedup.png
 
 lint:
 	-gometalinter --deadline=60s | sort
