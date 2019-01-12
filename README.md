@@ -70,7 +70,7 @@ Dependencies:
 * [github.com/mattn/go-isatty](http://github.com/mattn/go-isatty) //terminal tty detection
 * [github.com/kr/pty](http://github.com/kr/pty) //unix pty control (server pty connections)
 * [github.com/jameskeane/bcrypt](http://github.com/jameskeane/bcrypt) //password storage/auth
-* [blitter.com/go/goutmp](https://blitter.com/gogs/RLabs/goutmp) // wtmp/lastlog C bindings
+* [blitter.com/go/goutmp](https://gogs.blitter.com/RLabs/goutmp) // wtmp/lastlog C bindings
 * [https://git.schwanenlied.me/yawning/kyber](https://git.schwanenlied.me/yawning/kyber) // golang Kyber KEM
 * [blitter.com/go/mtwist](https://gogs.blitter.com/RLabs/mtwist) // 64-bit Mersenne Twister PRNG
 * [blitter.com/go/cryptmt](https://gogs.blitter.com/RLabs/cryptmt) // CryptMTv1 stream cipher
