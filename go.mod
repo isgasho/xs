@@ -10,5 +10,5 @@ require (
 	github.com/kr/pty v1.1.3
 	github.com/mattn/go-isatty v0.0.4
 	golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9
-	golang.org/x/sys v0.0.0-20181211161752-7da8ea5c8182
+	golang.org/x/sys v0.0.0-20181213200352-4d1cda033e06
 )
