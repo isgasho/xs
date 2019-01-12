@@ -24,29 +24,29 @@ labelloc="t";
         
         subgraph "cluster_blitter.com/go/hkexsh" {
         penwidth="0.8";
-fontsize="16";
-fillcolor="lightyellow";
-URL="/?f=blitter.com/go/hkexsh";
-tooltip="package: blitter.com/go/hkexsh";
 style="filled";
 fontname="bold";
+tooltip="package: blitter.com/go/hkexsh";
+URL="/?f=blitter.com/go/hkexsh";
+fontsize="16";
+fillcolor="lightyellow";
 rank="sink";
 label="[hkexsh]";
         
-        "blitter.com/go/hkexsh.ReadPassword" [ penwidth="1.5" fillcolor="moccasin" label="ReadPassword" ]
+        "blitter.com/go/hkexsh.ReadPassword" [ fillcolor="moccasin" label="ReadPassword" penwidth="1.5" ]
         
     }
 
         subgraph "cluster_github.com/jameskeane/bcrypt" {
-        style="filled";
-URL="/?f=github.com/jameskeane/bcrypt";
-penwidth="0.8";
+        fontsize="16";
+style="filled";
 fillcolor="lightyellow";
-fontname="bold";
 rank="sink";
+penwidth="0.8";
+fontname="bold";
 label="[bcrypt]";
+URL="/?f=github.com/jameskeane/bcrypt";
 tooltip="package: github.com/jameskeane/bcrypt";
-fontsize="16";
         
         "github.com/jameskeane/bcrypt.Salt" [ fillcolor="moccasin" label="Salt" penwidth="1.5" ]
         "github.com/jameskeane/bcrypt.Hash" [ fillcolor="moccasin" label="Hash" penwidth="1.5" ]
