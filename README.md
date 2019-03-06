@@ -164,5 +164,3 @@ Example, tunnelling ssh through hkexsh (NOTE [issue #15](https://blitter.com:300
 * [server side] $ sudo /usr/sbin/sshd -p 7002
 * [client side, term A] $ hkexsh -T=6002:7002 user@server
 * [client side, term B] $ ssh user@localhost -p 6002
-
-
